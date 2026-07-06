@@ -133,3 +133,71 @@ func TestExecutionServiceRefreshSessionPropagatesStrategyError(t *testing.T) {
 		t.Fatalf("RefreshSession() error = %v, want %v", err, wantErr)
 	}
 }
+
+// fakeLogStream is a minimal execution.LogStream test double.
+type fakeLogStream struct {
+	events chan execution.LogEvent
+	err    error
+}
+
+func newFakeLogStream(logEvents []execution.LogEvent, err error) *fakeLogStream {
+	ch := make(chan execution.LogEvent, len(logEvents))
+	for _, e := range logEvents {
+		ch <- e
+	}
+	close(ch)
+	return &fakeLogStream{events: ch, err: err}
+}
+
+func (s *fakeLogStream) Events() <-chan execution.LogEvent { return s.events }
+func (s *fakeLogStream) Err() error                        { return s.err }
+func (s *fakeLogStream) Close() error                      { return nil }
+
+func TestExecutionServiceOpenLogsAdaptsEvents(t *testing.T) {
+	logEvents := []execution.LogEvent{
+		{Timestamp: time.Now(), Type: execution.LogEventStdout, Content: "listening on :3000"},
+		{Timestamp: time.Now(), Type: execution.LogEventEOF, Content: "process exited"},
+	}
+	strategy := &fakeStrategy{runtime: models.RuntimeNode, logStream: newFakeLogStream(logEvents, nil)}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	stream, err := svc.OpenLogs(context.Background(), app.ID, services.RunSession{PID: 4242})
+	if err != nil {
+		t.Fatalf("OpenLogs() error = %v", err)
+	}
+
+	var got []services.LogEvent
+	for e := range stream.Events() {
+		got = append(got, e)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2: %+v", len(got), got)
+	}
+	if got[0].Type != string(execution.LogEventStdout) || got[0].Content != "listening on :3000" {
+		t.Errorf("got[0] = %+v, want stdout %q", got[0], "listening on :3000")
+	}
+	if got[1].Type != string(execution.LogEventEOF) {
+		t.Errorf("got[1].Type = %q, want %q", got[1].Type, execution.LogEventEOF)
+	}
+	if stream.Err() != nil {
+		t.Fatalf("Err() = %v, want nil", stream.Err())
+	}
+}
+
+func TestExecutionServiceOpenLogsPropagatesStrategyError(t *testing.T) {
+	wantErr := errors.New("no output captured")
+	strategy := &fakeStrategy{runtime: models.RuntimeNode, logsErr: wantErr}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	if _, err := svc.OpenLogs(context.Background(), app.ID, services.RunSession{PID: 4242}); !errors.Is(err, wantErr) {
+		t.Fatalf("OpenLogs() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestExecutionServiceOpenLogsUnknownApplication(t *testing.T) {
+	svc, _ := newExecutionServiceWithStrategy(t, &fakeStrategy{runtime: models.RuntimeNode})
+
+	if _, err := svc.OpenLogs(context.Background(), "does-not-exist", services.RunSession{PID: 4242}); err == nil {
+		t.Fatal("expected an error for an unknown application")
+	}
+}

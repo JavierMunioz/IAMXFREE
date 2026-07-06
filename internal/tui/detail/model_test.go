@@ -47,6 +47,8 @@ type fakeExecutionService struct {
 	stopErr      error
 	refreshed    services.RunSession
 	refreshErr   error
+	logStream    services.LogStream
+	logsErr      error
 }
 
 func (f *fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
@@ -54,6 +56,9 @@ func (f *fakeExecutionService) Start(context.Context, string) (services.RunSessi
 }
 func (f *fakeExecutionService) Stop(context.Context, string, services.RunSession) error {
 	return f.stopErr
+}
+func (f *fakeExecutionService) OpenLogs(context.Context, string, services.RunSession) (services.LogStream, error) {
+	return f.logStream, f.logsErr
 }
 func (f *fakeExecutionService) RefreshSession(context.Context, string, services.RunSession) (services.RunSession, error) {
 	return f.refreshed, f.refreshErr

@@ -23,6 +23,11 @@ type ExecutionService interface {
 	// RefreshSession re-checks whether session's process is still alive,
 	// returning an updated RunSession.
 	RefreshSession(ctx context.Context, appID string, session RunSession) (RunSession, error)
+
+	// OpenLogs opens a live stream of session's captured output. It never
+	// starts a new process — it attaches to output already being captured
+	// for the session.
+	OpenLogs(ctx context.Context, appID string, session RunSession) (LogStream, error)
 }
 
 type executionService struct {
@@ -84,6 +89,24 @@ func (s *executionService) RefreshSession(ctx context.Context, appID string, ses
 		return RunSession{}, err
 	}
 	return toRunSession(updated), nil
+}
+
+func (s *executionService) OpenLogs(ctx context.Context, appID string, session RunSession) (LogStream, error) {
+	app, err := s.repo.FindByID(ctx, appID)
+	if err != nil {
+		return nil, err
+	}
+
+	strategy, err := s.resolver.Resolve(app)
+	if err != nil {
+		return nil, err
+	}
+
+	stream, err := strategy.Logs(ctx, app, fromRunSession(session))
+	if err != nil {
+		return nil, err
+	}
+	return newLogStreamAdapter(stream), nil
 }
 
 func toRunSession(session execution.Session) RunSession {
