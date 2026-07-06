@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
 )
@@ -256,5 +257,84 @@ func TestLinuxHostReadFileMissing(t *testing.T) {
 	host := runtimehost.NewLinuxHost()
 	if _, err := host.ReadFile(filepath.Join(t.TempDir(), "missing.json")); err == nil {
 		t.Fatal("expected an error for a missing file")
+	}
+}
+
+func TestLinuxHostStartProcessAndIsRunning(t *testing.T) {
+	host := runtimehost.NewLinuxHost()
+
+	pid, err := host.StartProcess(context.Background(), runtimehost.Command{
+		Name: "sh",
+		Args: []string{"-c", "sleep 2"},
+	})
+	if err != nil {
+		t.Fatalf("StartProcess() error = %v", err)
+	}
+	if pid <= 0 {
+		t.Fatalf("StartProcess() pid = %d, want > 0", pid)
+	}
+
+	running, err := host.IsProcessRunning(pid)
+	if err != nil {
+		t.Fatalf("IsProcessRunning() error = %v", err)
+	}
+	if !running {
+		t.Fatal("expected the started process to be running")
+	}
+
+	if err := host.StopProcess(pid); err != nil {
+		t.Fatalf("StopProcess() error = %v", err)
+	}
+}
+
+func TestLinuxHostStopProcessTerminatesIt(t *testing.T) {
+	host := runtimehost.NewLinuxHost()
+
+	pid, err := host.StartProcess(context.Background(), runtimehost.Command{
+		Name: "sh",
+		Args: []string{"-c", "sleep 30"},
+	})
+	if err != nil {
+		t.Fatalf("StartProcess() error = %v", err)
+	}
+
+	if err := host.StopProcess(pid); err != nil {
+		t.Fatalf("StopProcess() error = %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		running, err := host.IsProcessRunning(pid)
+		if err != nil {
+			t.Fatalf("IsProcessRunning() error = %v", err)
+		}
+		if !running {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("expected the process to stop within 2 seconds of StopProcess")
+}
+
+func TestLinuxHostIsProcessRunningFalseForUnknownPID(t *testing.T) {
+	host := runtimehost.NewLinuxHost()
+
+	running, err := host.IsProcessRunning(999999)
+	if err != nil {
+		t.Fatalf("IsProcessRunning() error = %v", err)
+	}
+	if running {
+		t.Fatal("expected an unknown PID to report not running")
+	}
+}
+
+func TestLinuxHostStartProcessInvalidCommand(t *testing.T) {
+	host := runtimehost.NewLinuxHost()
+
+	_, err := host.StartProcess(context.Background(), runtimehost.Command{
+		Name: "definitely-not-a-real-command-xyz123",
+	})
+	if err == nil {
+		t.Fatal("expected an error starting a nonexistent command")
 	}
 }

@@ -170,3 +170,84 @@ func TestFakeHostReadFileConfiguredError(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v, want %v", err, wantErr)
 	}
 }
+
+func TestFakeHostStartProcessConfigured(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().
+		WithStartProcess("npm", []string{"start"}, 4242, nil)
+
+	pid, err := host.StartProcess(context.Background(), runtimehost.Command{Name: "npm", Args: []string{"start"}})
+	if err != nil {
+		t.Fatalf("StartProcess() error = %v", err)
+	}
+	if pid != 4242 {
+		t.Fatalf("StartProcess() pid = %d, want 4242", pid)
+	}
+
+	running, err := host.IsProcessRunning(4242)
+	if err != nil {
+		t.Fatalf("IsProcessRunning() error = %v", err)
+	}
+	if !running {
+		t.Fatal("expected a successfully started process to report running")
+	}
+}
+
+func TestFakeHostStartProcessUnconfiguredReturnsError(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+
+	if _, err := host.StartProcess(context.Background(), runtimehost.Command{Name: "npm", Args: []string{"start"}}); err == nil {
+		t.Fatal("expected an error for an unconfigured command")
+	}
+}
+
+func TestFakeHostStartProcessConfiguredError(t *testing.T) {
+	wantErr := errors.New("boom")
+	host := runtimehosttest.NewFakeHost().
+		WithStartProcess("npm", []string{"start"}, 0, wantErr)
+
+	if _, err := host.StartProcess(context.Background(), runtimehost.Command{Name: "npm", Args: []string{"start"}}); !errors.Is(err, wantErr) {
+		t.Fatalf("StartProcess() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestFakeHostIsProcessRunningDefaultsToFalse(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+
+	running, err := host.IsProcessRunning(1234)
+	if err != nil {
+		t.Fatalf("IsProcessRunning() error = %v", err)
+	}
+	if running {
+		t.Fatal("expected an unconfigured PID to report not running")
+	}
+}
+
+func TestFakeHostStopProcessMarksNotRunning(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().WithRunningPID(4242, true)
+
+	if err := host.StopProcess(4242); err != nil {
+		t.Fatalf("StopProcess() error = %v", err)
+	}
+
+	running, _ := host.IsProcessRunning(4242)
+	if running {
+		t.Fatal("expected the process to no longer be running after StopProcess")
+	}
+	if !host.Stopped(4242) {
+		t.Fatal("expected Stopped(4242) to be true")
+	}
+}
+
+func TestFakeHostStopProcessConfiguredError(t *testing.T) {
+	wantErr := errors.New("no such process")
+	host := runtimehosttest.NewFakeHost().
+		WithRunningPID(4242, true).
+		WithStopError(4242, wantErr)
+
+	if err := host.StopProcess(4242); !errors.Is(err, wantErr) {
+		t.Fatalf("StopProcess() error = %v, want %v", err, wantErr)
+	}
+	if !host.Stopped(4242) {
+		t.Fatal("expected Stopped(4242) to be true even when the stop failed")
+	}
+}

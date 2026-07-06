@@ -7,17 +7,22 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 )
 
 // LinuxHost implements Host using the real operating system: os/exec for
 // commands, os for filesystem checks. It is the implementation IAMXFREE
 // runs with on a Linux VPS.
-type LinuxHost struct{}
+type LinuxHost struct {
+	mu        sync.Mutex
+	processes map[int]*os.Process
+}
 
 // NewLinuxHost returns a Host backed by the real operating system.
 func NewLinuxHost() *LinuxHost {
-	return &LinuxHost{}
+	return &LinuxHost{processes: make(map[int]*os.Process)}
 }
 
 var _ Host = (*LinuxHost)(nil)
@@ -139,4 +144,77 @@ func (h *LinuxHost) DirExists(path string) (bool, error) {
 
 func (h *LinuxHost) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
+}
+
+// StartProcess starts cmd in the background. It tracks the resulting
+// *os.Process internally and reaps it in a goroutine once it exits, so a
+// long-running child never becomes a zombie even though nothing calls
+// Wait() on it explicitly.
+func (h *LinuxHost) StartProcess(_ context.Context, cmd Command) (int, error) {
+	execCmd := exec.Command(cmd.Name, cmd.Args...)
+	execCmd.Dir = cmd.Dir
+
+	if err := execCmd.Start(); err != nil {
+		return 0, &ExecutionError{
+			Command: cmd.Name,
+			Args:    cmd.Args,
+			Err:     err,
+		}
+	}
+
+	pid := execCmd.Process.Pid
+
+	h.mu.Lock()
+	h.processes[pid] = execCmd.Process
+	h.mu.Unlock()
+
+	go func() {
+		_ = execCmd.Wait()
+		h.mu.Lock()
+		delete(h.processes, pid)
+		h.mu.Unlock()
+	}()
+
+	return pid, nil
+}
+
+// IsProcessRunning first checks whether this Host itself is still tracking
+// pid (started it and hasn't observed it exit); if not, it falls back to a
+// best-effort OS-level liveness check, so a PID from a previous IAMXFREE
+// session can still be queried.
+func (h *LinuxHost) IsProcessRunning(pid int) (bool, error) {
+	h.mu.Lock()
+	_, tracked := h.processes[pid]
+	h.mu.Unlock()
+	if tracked {
+		return true, nil
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false, nil
+	}
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (h *LinuxHost) StopProcess(pid int) error {
+	h.mu.Lock()
+	process, tracked := h.processes[pid]
+	h.mu.Unlock()
+
+	if !tracked {
+		var err error
+		process, err = os.FindProcess(pid)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		return &ExecutionError{Command: "stop", Err: err}
+	}
+	return nil
 }

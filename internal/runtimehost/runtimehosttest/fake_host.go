@@ -24,20 +24,34 @@ type FakeHost struct {
 	dirs         map[string]bool
 	fileContents map[string][]byte
 	fileErrors   map[string]error
+
+	startProcessResults map[string]startProcessResult
+	runningPIDs         map[int]bool
+	stopErrors          map[int]error
+	stoppedPIDs         map[int]bool
+}
+
+type startProcessResult struct {
+	pid int
+	err error
 }
 
 // NewFakeHost returns an empty FakeHost; every operation reports "not
 // found"/empty until configured with a With* method.
 func NewFakeHost() *FakeHost {
 	return &FakeHost{
-		lookPaths:    make(map[string]runtimehost.ToolAvailability),
-		versions:     make(map[string]runtimehost.ToolInfo),
-		runResults:   make(map[string]runtimehost.CommandResult),
-		runErrors:    make(map[string]error),
-		files:        make(map[string]bool),
-		dirs:         make(map[string]bool),
-		fileContents: make(map[string][]byte),
-		fileErrors:   make(map[string]error),
+		lookPaths:           make(map[string]runtimehost.ToolAvailability),
+		versions:            make(map[string]runtimehost.ToolInfo),
+		runResults:          make(map[string]runtimehost.CommandResult),
+		runErrors:           make(map[string]error),
+		files:               make(map[string]bool),
+		dirs:                make(map[string]bool),
+		fileContents:        make(map[string][]byte),
+		fileErrors:          make(map[string]error),
+		startProcessResults: make(map[string]startProcessResult),
+		runningPIDs:         make(map[int]bool),
+		stopErrors:          make(map[int]error),
+		stoppedPIDs:         make(map[int]bool),
 	}
 }
 
@@ -87,6 +101,37 @@ func (f *FakeHost) WithReadFile(path string, content []byte, err error) *FakeHos
 	f.fileContents[path] = content
 	f.fileErrors[path] = err
 	return f
+}
+
+// WithStartProcess makes StartProcess return pid and err for a command
+// matching name and args exactly. A nil err also marks pid as running, so
+// a subsequent IsProcessRunning(pid) reports true until WithRunningPID or
+// StopProcess says otherwise.
+func (f *FakeHost) WithStartProcess(name string, args []string, pid int, err error) *FakeHost {
+	f.startProcessResults[commandKey(name, args)] = startProcessResult{pid: pid, err: err}
+	if err == nil {
+		f.runningPIDs[pid] = true
+	}
+	return f
+}
+
+// WithRunningPID makes IsProcessRunning(pid) report running.
+func (f *FakeHost) WithRunningPID(pid int, running bool) *FakeHost {
+	f.runningPIDs[pid] = running
+	return f
+}
+
+// WithStopError makes StopProcess(pid) return err instead of succeeding.
+func (f *FakeHost) WithStopError(pid int, err error) *FakeHost {
+	f.stopErrors[pid] = err
+	return f
+}
+
+// Stopped reports whether StopProcess(pid) was called, regardless of
+// whether it succeeded — useful for asserting a strategy attempted to stop
+// the right process.
+func (f *FakeHost) Stopped(pid int) bool {
+	return f.stoppedPIDs[pid]
 }
 
 func (f *FakeHost) LookPath(name string) (runtimehost.ToolAvailability, error) {
@@ -143,6 +188,28 @@ func (f *FakeHost) ReadFile(path string) ([]byte, error) {
 		return content, nil
 	}
 	return nil, os.ErrNotExist
+}
+
+func (f *FakeHost) StartProcess(_ context.Context, cmd runtimehost.Command) (int, error) {
+	key := commandKey(cmd.Name, cmd.Args)
+	result, ok := f.startProcessResults[key]
+	if !ok {
+		return 0, fmt.Errorf("runtimehosttest: no start-process result configured for %q", key)
+	}
+	return result.pid, result.err
+}
+
+func (f *FakeHost) IsProcessRunning(pid int) (bool, error) {
+	return f.runningPIDs[pid], nil
+}
+
+func (f *FakeHost) StopProcess(pid int) error {
+	f.stoppedPIDs[pid] = true
+	if err, ok := f.stopErrors[pid]; ok && err != nil {
+		return err
+	}
+	f.runningPIDs[pid] = false
+	return nil
 }
 
 func commandKey(name string, args []string) string {

@@ -3,8 +3,10 @@ package runtimehost
 import "context"
 
 // Host is the only way anything in IAMXFREE talks to the operating system.
-// It exposes the common operations execution strategies will need — none of
-// them run a persistent process; that is a concern for a later iteration.
+// It exposes the common operations execution strategies will need,
+// including starting and stopping a long-running process — but not yet
+// supervising it (no automatic restarts; that is a concern for a later
+// iteration).
 type Host interface {
 	// LookPath reports whether name can be found as an executable on PATH.
 	// "Not found" is reported through the returned ToolAvailability, not as
@@ -40,4 +42,17 @@ type Host interface {
 	// checking package.json) use this instead of touching the filesystem
 	// directly.
 	ReadFile(path string) ([]byte, error)
+
+	// StartProcess starts cmd as a background process and returns its PID
+	// immediately, without waiting for it to exit. Unlike Run/RunCaptured,
+	// this is how a long-running process (e.g. a web server) is started
+	// and left running.
+	StartProcess(ctx context.Context, cmd Command) (int, error)
+
+	// IsProcessRunning reports whether pid refers to a currently running
+	// process.
+	IsProcessRunning(pid int) (bool, error)
+
+	// StopProcess asks pid to terminate gracefully.
+	StopProcess(pid int) error
 }
