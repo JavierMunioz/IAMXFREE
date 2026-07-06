@@ -45,8 +45,10 @@ func (s *nodeStrategy) Start(ctx context.Context, app *models.Application) (Sess
 	}, nil
 }
 
-func (s *nodeStrategy) Stop(context.Context, *models.Application, Session) error {
-	return ErrNotImplemented
+// Stop terminates the process described by session via runtimehost.Host.
+// Automatic restart-on-stop is explicitly out of scope for this iteration.
+func (s *nodeStrategy) Stop(_ context.Context, _ *models.Application, session Session) error {
+	return s.host.StopProcess(session.PID)
 }
 
 // splitCommand breaks a configured command string (e.g. "npm start") into
