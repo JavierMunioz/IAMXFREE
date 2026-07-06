@@ -29,6 +29,13 @@ type FakeHost struct {
 	runningPIDs         map[int]bool
 	stopErrors          map[int]error
 	stoppedPIDs         map[int]bool
+
+	outputStreams map[int]outputStreamResult
+}
+
+type outputStreamResult struct {
+	chunks []runtimehost.OutputChunk
+	err    error
 }
 
 type startProcessResult struct {
@@ -52,6 +59,7 @@ func NewFakeHost() *FakeHost {
 		runningPIDs:         make(map[int]bool),
 		stopErrors:          make(map[int]error),
 		stoppedPIDs:         make(map[int]bool),
+		outputStreams:       make(map[int]outputStreamResult),
 	}
 }
 
@@ -134,6 +142,13 @@ func (f *FakeHost) Stopped(pid int) bool {
 	return f.stoppedPIDs[pid]
 }
 
+// WithOutputStream makes StreamOutput(pid) return a stream that replays
+// chunks in order and then ends, reporting err (nil for a clean end).
+func (f *FakeHost) WithOutputStream(pid int, chunks []runtimehost.OutputChunk, err error) *FakeHost {
+	f.outputStreams[pid] = outputStreamResult{chunks: chunks, err: err}
+	return f
+}
+
 func (f *FakeHost) LookPath(name string) (runtimehost.ToolAvailability, error) {
 	if avail, ok := f.lookPaths[name]; ok {
 		return avail, nil
@@ -211,6 +226,34 @@ func (f *FakeHost) StopProcess(pid int) error {
 	f.runningPIDs[pid] = false
 	return nil
 }
+
+func (f *FakeHost) StreamOutput(pid int) (runtimehost.OutputStream, error) {
+	result, ok := f.outputStreams[pid]
+	if !ok {
+		return nil, fmt.Errorf("runtimehosttest: no output stream configured for pid %d", pid)
+	}
+	return newFakeOutputStream(result.chunks, result.err), nil
+}
+
+// fakeOutputStream replays a fixed, pre-buffered slice of chunks and then
+// ends — deterministic and dependency-free, unlike LinuxHost's live capture.
+type fakeOutputStream struct {
+	ch  chan runtimehost.OutputChunk
+	err error
+}
+
+func newFakeOutputStream(chunks []runtimehost.OutputChunk, err error) *fakeOutputStream {
+	ch := make(chan runtimehost.OutputChunk, len(chunks))
+	for _, c := range chunks {
+		ch <- c
+	}
+	close(ch)
+	return &fakeOutputStream{ch: ch, err: err}
+}
+
+func (s *fakeOutputStream) Chunks() <-chan runtimehost.OutputChunk { return s.ch }
+func (s *fakeOutputStream) Err() error                             { return s.err }
+func (s *fakeOutputStream) Close() error                           { return nil }
 
 func commandKey(name string, args []string) string {
 	return strings.TrimSpace(name + " " + strings.Join(args, " "))

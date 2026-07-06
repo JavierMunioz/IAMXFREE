@@ -55,4 +55,11 @@ type Host interface {
 
 	// StopProcess asks pid to terminate gracefully.
 	StopProcess(pid int) error
+
+	// StreamOutput returns the captured stdout/stderr for a process
+	// previously started with StartProcess. Capture begins at StartProcess
+	// time — this never starts a new process, only attaches to output
+	// already being captured; backlog is bounded, so very old output may
+	// already be gone. Fails if pid was never started by this Host.
+	StreamOutput(pid int) (OutputStream, error)
 }

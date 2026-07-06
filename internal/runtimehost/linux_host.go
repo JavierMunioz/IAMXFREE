@@ -1,9 +1,12 @@
 package runtimehost
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -18,11 +21,15 @@ import (
 type LinuxHost struct {
 	mu        sync.Mutex
 	processes map[int]*os.Process
+	outputs   map[int]*outputBuffer
 }
 
 // NewLinuxHost returns a Host backed by the real operating system.
 func NewLinuxHost() *LinuxHost {
-	return &LinuxHost{processes: make(map[int]*os.Process)}
+	return &LinuxHost{
+		processes: make(map[int]*os.Process),
+		outputs:   make(map[int]*outputBuffer),
+	}
 }
 
 var _ Host = (*LinuxHost)(nil)
@@ -149,10 +156,21 @@ func (h *LinuxHost) ReadFile(path string) ([]byte, error) {
 // StartProcess starts cmd in the background. It tracks the resulting
 // *os.Process internally and reaps it in a goroutine once it exits, so a
 // long-running child never becomes a zombie even though nothing calls
-// Wait() on it explicitly.
+// Wait() on it explicitly. It also captures the process's stdout/stderr
+// into a bounded per-PID buffer from the moment it starts, so a later
+// StreamOutput call can replay everything captured so far.
 func (h *LinuxHost) StartProcess(_ context.Context, cmd Command) (int, error) {
 	execCmd := exec.Command(cmd.Name, cmd.Args...)
 	execCmd.Dir = cmd.Dir
+
+	stdout, err := execCmd.StdoutPipe()
+	if err != nil {
+		return 0, &ExecutionError{Command: cmd.Name, Args: cmd.Args, Err: err}
+	}
+	stderr, err := execCmd.StderrPipe()
+	if err != nil {
+		return 0, &ExecutionError{Command: cmd.Name, Args: cmd.Args, Err: err}
+	}
 
 	if err := execCmd.Start(); err != nil {
 		return 0, &ExecutionError{
@@ -163,19 +181,42 @@ func (h *LinuxHost) StartProcess(_ context.Context, cmd Command) (int, error) {
 	}
 
 	pid := execCmd.Process.Pid
+	output := newOutputBuffer(defaultOutputBufferCapacity)
 
 	h.mu.Lock()
 	h.processes[pid] = execCmd.Process
+	h.outputs[pid] = output
 	h.mu.Unlock()
 
+	var scanning sync.WaitGroup
+	scanning.Add(2)
+	go scanOutputInto(&scanning, stdout, OutputStdout, output)
+	go scanOutputInto(&scanning, stderr, OutputStderr, output)
+
 	go func() {
-		_ = execCmd.Wait()
+		// StdoutPipe/StderrPipe's docs require every read to complete before
+		// Wait is called, so the scanners must finish first.
+		scanning.Wait()
+		waitErr := execCmd.Wait()
+		output.finish(waitErr)
+
 		h.mu.Lock()
 		delete(h.processes, pid)
 		h.mu.Unlock()
 	}()
 
 	return pid, nil
+}
+
+// scanOutputInto reads r line by line, appending each line to output as an
+// OutputChunk of kind, until r is exhausted (the process exited and closed
+// its pipes).
+func scanOutputInto(wg *sync.WaitGroup, r io.Reader, kind OutputStreamKind, output *outputBuffer) {
+	defer wg.Done()
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		output.append(OutputChunk{Stream: kind, Line: scanner.Text(), Time: time.Now()})
+	}
 }
 
 // IsProcessRunning first checks whether this Host itself is still tracking
@@ -217,4 +258,14 @@ func (h *LinuxHost) StopProcess(pid int) error {
 		return &ExecutionError{Command: "stop", Err: err}
 	}
 	return nil
+}
+
+func (h *LinuxHost) StreamOutput(pid int) (OutputStream, error) {
+	h.mu.Lock()
+	output, ok := h.outputs[pid]
+	h.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("runtimehost: no output captured for pid %d", pid)
+	}
+	return output.subscribe(), nil
 }

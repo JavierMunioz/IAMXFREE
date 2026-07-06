@@ -251,3 +251,55 @@ func TestFakeHostStopProcessConfiguredError(t *testing.T) {
 		t.Fatal("expected Stopped(4242) to be true even when the stop failed")
 	}
 }
+
+func TestFakeHostStreamOutputReplaysConfiguredChunks(t *testing.T) {
+	want := []runtimehost.OutputChunk{
+		{Stream: runtimehost.OutputStdout, Line: "listening on :3000"},
+		{Stream: runtimehost.OutputStderr, Line: "warning: deprecated flag"},
+	}
+	host := runtimehosttest.NewFakeHost().WithOutputStream(4242, want, nil)
+
+	stream, err := host.StreamOutput(4242)
+	if err != nil {
+		t.Fatalf("StreamOutput() error = %v", err)
+	}
+
+	var got []runtimehost.OutputChunk
+	for c := range stream.Chunks() {
+		got = append(got, c)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(got) = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].Stream != want[i].Stream || got[i].Line != want[i].Line {
+			t.Errorf("got[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if stream.Err() != nil {
+		t.Fatalf("Err() = %v, want nil", stream.Err())
+	}
+}
+
+func TestFakeHostStreamOutputConfiguredError(t *testing.T) {
+	wantErr := errors.New("process crashed")
+	host := runtimehosttest.NewFakeHost().WithOutputStream(4242, nil, wantErr)
+
+	stream, err := host.StreamOutput(4242)
+	if err != nil {
+		t.Fatalf("StreamOutput() error = %v", err)
+	}
+	for range stream.Chunks() {
+	}
+	if !errors.Is(stream.Err(), wantErr) {
+		t.Fatalf("Err() = %v, want %v", stream.Err(), wantErr)
+	}
+}
+
+func TestFakeHostStreamOutputUnconfiguredReturnsError(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+
+	if _, err := host.StreamOutput(4242); err == nil {
+		t.Fatal("expected an error for an unconfigured pid")
+	}
+}
