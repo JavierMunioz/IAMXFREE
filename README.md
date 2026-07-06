@@ -124,8 +124,9 @@ application count, a live clock — server uptime is a placeholder until a
 future iteration reads it for real), a grid of cards (one per registered
 application, showing name/type/framework/runtime/status/port/domain), and a
 bottom keybinding bar. It is an independent component: it depends only on
-`services.ApplicationService`, never on a repository directly, and holds no
-business logic — loading, sorting and formatting data is all it does.
+`services.ApplicationService` and `services.ExecutionService`, never on a
+repository or `internal/monitor` directly, and holds no business logic —
+loading, sorting and formatting data is all it does.
 
 Selection is never ambiguous: the active card gets both a distinct border
 shape (thick vs. rounded) and an accent color, so it reads correctly even on
@@ -147,6 +148,16 @@ run-status icon — fetched once per `Reload()` via
 `ApplicationService.CheckExecutionHealth` and simply omitted for
 applications with no resolvable strategy yet.
 
+When a session is running, the card grows one more line — `PID <pid> · up
+<duration>` — fetched via the new `ExecutionService.ActiveSession(appID)`
+(see "Runtime Monitor"). Unlike health, this isn't an OS query: it's a pure
+in-memory lookup of whatever `Start`/`Stop`/`RefreshSession` last observed,
+so it costs nothing to re-fetch on every `Reload()`. The `up <duration>`
+text is recomputed at render time from the session's `StartedAt`, and the
+dashboard's existing once-a-second tick (previously only there for the
+clock) keeps it advancing live — no new polling of the operating system was
+added to make this work.
+
 ### Application Detail Screen
 
 `internal/tui/detail` is where a single registered application is actually
@@ -160,7 +171,7 @@ directly (verified with
 `grep -rn "internal/execution\|internal/runtimehost\|internal/repositories" internal/tui/detail/*.go`,
 which matches nothing outside a doc comment).
 
-Four panels:
+Five panels:
 - **Top** — general info: name, type, framework, runtime, resolved
   `Strategy`, the application's stored `Status`, live `Health`, port, domain.
 - **Left ("Technical")** — where it lives and how it's built: path,
@@ -171,26 +182,32 @@ Four panels:
   nothing has been started yet (or IAMXFREE was restarted, losing its
   in-memory tracking — see "Runtime Host"), this says so explicitly rather
   than showing blank fields.
+- **Metrics** — resource usage for the tracked session, as last observed by
+  the Runtime Monitor (see below): CPU%, memory RSS, memory VSZ. Only
+  rendered once a session exists; a metric this environment cannot report
+  (or that was never fetched) shows as `n/a`, never a fabricated value.
 - **Bottom** — the action bar, listing every keybinding the screen responds
   to, including the ones that don't do anything real yet (marked with `*`):
   `s` start, `x` stop, `l` logs, `r`\* restart, `e`\* edit config, `f5`
   refresh, `b`/`esc` back, `q` quit. No dead keys — every one of them
   produces a visible status message.
 
-The session isn't persisted anywhere: pressing `s` calls
-`ExecutionService.Start`, and the resulting `services.RunSession` (a plain
-projection of `execution.Session` — PID, start time, command, args, working
-dir, status, runtime) is held only in the screen's own in-memory state for
-as long as it stays open. Pressing `x` calls `ExecutionService.Stop` and
-clears it. `s` refuses to start a second session over a tracked one (it
-would silently leak the first process's PID); `x` refuses when nothing is
+The session isn't persisted anywhere in the detail screen itself: pressing
+`s` calls `ExecutionService.Start`, and the resulting `services.RunSession`
+(a plain projection of `execution.Session` — PID, start time, command,
+args, working dir, status, runtime) is held in the screen's own in-memory
+state for as long as it stays open (`ExecutionService` separately tracks
+the same session for cross-screen lookups — see "Runtime Monitor"). Pressing
+`x` calls `ExecutionService.Stop` and clears it, along with any observed
+metrics. `s` refuses to start a second session over a tracked one (it would
+silently leak the first process's PID); `x` refuses when nothing is
 tracked. `f5` is the *only* refresh — there is no automatic/periodic
-polling yet — and it re-runs both the health check and, if a session is
-tracked, `ExecutionService.RefreshSession` (backed by the new
-`Strategy.Status` method, see "Execution engine") to notice if the process
-died on its own since the screen last checked. `l` opens the real-time logs
-screen (see below) for the tracked session — refused with a status message
-when nothing is running yet, never a dead key.
+polling yet — and it re-runs the health check and, if a session is tracked,
+both `ExecutionService.RefreshSession` (backed by `Strategy.Status`, see
+"Execution engine") to notice if the process died on its own, and
+`ExecutionService.Snapshot` to re-observe its resource usage. `l` opens the
+real-time logs screen (see below) for the tracked session — refused with a
+status message when nothing is running yet, never a dead key.
 
 ### Real-time Logs
 
@@ -243,6 +260,57 @@ true pins the view to the newest lines (so incoming output keeps scrolling
 into view, like `tail -f`); scrolling up disables it, and scrolling back
 down to the bottom (or pressing `end`) re-enables it.
 
+### Runtime Monitor
+
+`internal/monitor` is the second transversal capability, alongside
+real-time logs: it observes a session's **real** operating-system state —
+process status, CPU/memory usage, the context it was launched with — never
+starts, stops, or otherwise modifies what it observes, and builds a
+snapshot only on demand. Like the log system, it is designed to be
+**technology-agnostic from the start**: it depends only on
+`internal/execution` (for the `Session` it observes) and
+`internal/runtimehost` (the only thing allowed to actually query the OS) —
+never on `internal/tui`, `internal/tui/dashboard`, or `internal/services`
+(verified with
+`grep -rn "internal/tui\|internal/services" internal/monitor/*.go`, which
+matches nothing). Every current and future `execution.Strategy` is observed
+through the same `Monitor`, without any technology-specific code inside it.
+
+- **`RuntimeSnapshot`** — a point-in-time observation, grouped to keep
+  growing without reshaping what already exists: `Process` (PID, `State`
+  — `running`/`stopped` as seen by the OS right now, independent of the
+  `Session`'s own last-known `Status` — `StartedAt`, `Uptime`),
+  `Resources` (`CPUPercent`/`MemoryRSS`/`MemoryVSZ`, each a `Metric`), and
+  `Info` (working dir, command, args, runtime — already known from the
+  `Session`, so building this never requires an OS query).
+- **`Metric`** — `{Value float64, Available bool}`. Any reading that could
+  not be determined (unsupported platform, process no longer exists) is
+  `Available: false` rather than a fabricated zero; every caller down to
+  the TUI must check the flag before displaying `Value`.
+- **`Monitor.Snapshot(session)`** — the only method. Asks
+  `Host.IsProcessRunning` for `Process.State`, `Host.ProcessResources` for
+  `Resources`, and reads `Info` straight off the `Session` it was given.
+  Read-only, always on-demand — there is no background polling this
+  iteration.
+
+`services.ExecutionService.Snapshot(ctx, session)` wraps this: unlike
+`Start`/`Stop`/`RefreshSession`, it never resolves an `execution.Strategy` —
+observing a process is technology-agnostic, so it talks to the `Monitor`
+directly — and returns `services.RuntimeSnapshot`, a flat projection so
+`internal/tui` never needs to import `internal/monitor` or
+`internal/runtimehost`. `ExecutionService` also now keeps an in-memory
+registry of each app's most recently started/refreshed `execution.Session`,
+updated by `Start`/`Stop`/`RefreshSession` and exposed read-only via
+`ActiveSession(appID) (RunSession, bool)` — a pure in-memory lookup, never a
+liveness check — which is what lets the dashboard (a screen that never
+called `Start` itself) know a session exists at all (see "Dashboard").
+
+Both new capabilities are strictly on-demand: the detail screen's `f5` is
+the only thing that ever calls `Snapshot`, and the dashboard's per-second
+tick only re-renders already-known session data, never re-queries the OS.
+Automatic polling, charts, history, alerts and metrics export (Prometheus,
+Grafana) are explicitly out of scope for this iteration.
+
 ### Runtime Host
 
 `internal/runtimehost` is the only package allowed to talk to the operating
@@ -256,9 +324,10 @@ never depends on them.
   report it structurally), `Run`/`RunCaptured` (synchronous), `ReadFile`,
   `WorkingDir`, `FileExists`/`DirExists`, `StartProcess`/
   `IsProcessRunning`/`StopProcess` for a long-running background process
-  (no supervision/auto-restart yet — that's a later iteration), and
+  (no supervision/auto-restart yet — that's a later iteration),
   `StreamOutput(pid) (OutputStream, error)` for that process's captured
-  stdout/stderr.
+  stdout/stderr, and `ProcessResources(pid) (ProcessResources, error)` for
+  its CPU/memory usage (see "Runtime Monitor").
 - **`LinuxHost`** — the real implementation, backed by `os/exec` and `os`.
   `StartProcess` tracks the resulting `*os.Process` and reaps it in a
   background goroutine once it exits, so a long-running child (a web
@@ -272,6 +341,15 @@ never depends on them.
   lines live to as many independent subscribers as call it; capture, not
   `StreamOutput`, is what actually starts reading the process's pipes, so
   logs opened well after a process started still show its recent history.
+  `ProcessResources` reads `/proc/<pid>/stat` and `/proc/<pid>/status`
+  directly (no cgo, no external tool) — `CPUPercent` is total CPU time
+  consumed divided by wall-clock lifetime (an average since the process
+  started, not an instantaneous sample, since that would need two samples
+  spaced over an interval — polling infrastructure this iteration doesn't
+  have), `MemoryRSS`/`MemoryVSZ` come straight from `VmRSS`/`VmSize`. On a
+  platform without `/proc` (a developer's Mac, say), or once the pid no
+  longer exists, every field just comes back unavailable — never an error,
+  matching every other "could not determine" outcome in this package.
 - **`runtimehosttest.FakeHost`** — a builder-style test double
   (`WithLookPath`/`WithVersion`/`WithRunResult`/`WithReadFile`/
   `WithStartProcess`/`WithRunningPID`/`WithStopError`/`WithOutputStream`/...)
@@ -346,17 +424,22 @@ rather than crammed into one:
   invoking anything) and `CheckExecutionHealth` (actually runs
   `HealthCheck`, summarized into `services.ExecutionHealth{StrategyName,
   Healthy}`).
-- **`ExecutionService`** (new) — controlling a running application:
+- **`ExecutionService`** — controlling a running application:
   `Start`/`Stop`/`RefreshSession`, all working in terms of
   `services.RunSession` (a plain projection of `execution.Session`) so
   callers never need to import `internal/execution` to hold onto one
   between calls. Both services resolve the same application's `Strategy`
   independently through their own `*execution.Resolver`, since neither
-  depends on the other.
+  depends on the other. It also owns `Snapshot`/`ActiveSession` (see
+  "Runtime Monitor"), backed by a `*monitor.Monitor` instead of the
+  resolver — observing a process doesn't depend on which technology
+  started it.
 
 `internal/cli/root.go` registers `execution.NewNodeStrategy` (backed by
-`runtimehost.NewLinuxHost()`) into the registry at startup, and constructs
-both `ApplicationService` and `ExecutionService` from the same resolver.
+`runtimehost.NewLinuxHost()`) into the registry at startup, builds a
+`monitor.New(host)` from that same `Host`, and constructs `ApplicationService`
+from the resolver and `ExecutionService` from both the resolver and the
+monitor.
 
 ### Project Inspector
 
