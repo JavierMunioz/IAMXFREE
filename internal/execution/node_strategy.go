@@ -43,13 +43,17 @@ func (s *nodeStrategy) CanHandle(app *models.Application) bool {
 
 // HealthCheck is implemented in node_strategy_health.go.
 
-// Readiness, Start and Stop are filled in incrementally by later commits;
-// for now they report not implemented like every other still-unimplemented
-// lifecycle method.
-
-func (s *nodeStrategy) Readiness(context.Context, *models.Application) (Readiness, error) {
-	return Readiness{}, ErrNotImplemented
+func (s *nodeStrategy) Readiness(ctx context.Context, app *models.Application) (Readiness, error) {
+	health, err := s.HealthCheck(ctx, app)
+	if err != nil {
+		return Readiness{}, err
+	}
+	return DeriveReadiness(health), nil
 }
+
+// Start and Stop are filled in incrementally by later commits; for now they
+// report not implemented like every other still-unimplemented lifecycle
+// method.
 
 func (s *nodeStrategy) Start(context.Context, *models.Application) (Session, error) {
 	return Session{}, ErrNotImplemented
