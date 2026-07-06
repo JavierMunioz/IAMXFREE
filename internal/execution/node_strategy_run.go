@@ -51,6 +51,23 @@ func (s *nodeStrategy) Stop(_ context.Context, _ *models.Application, session Se
 	return s.host.StopProcess(session.PID)
 }
 
+// Status re-checks session's process via runtimehost.Host and returns an
+// updated Session reflecting whether it is still running.
+func (s *nodeStrategy) Status(_ context.Context, _ *models.Application, session Session) (Session, error) {
+	running, err := s.host.IsProcessRunning(session.PID)
+	if err != nil {
+		return Session{}, err
+	}
+
+	updated := session
+	if running {
+		updated.Status = StatusRunning
+	} else {
+		updated.Status = StatusStopped
+	}
+	return updated, nil
+}
+
 // splitCommand breaks a configured command string (e.g. "npm start") into
 // the executable name and its arguments. It is a plain whitespace split, not
 // a full shell parser — a configured command containing quoted arguments

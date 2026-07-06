@@ -75,6 +75,12 @@ type Strategy interface {
 	// Stop terminates the process described by session.
 	Stop(ctx context.Context, app *models.Application, session Session) error
 
+	// Status re-checks whether session's process is still alive, returning
+	// an updated Session (same fields, Status refreshed). It never mutates
+	// or persists anything — this is a point-in-time query used to refresh
+	// what's shown to the user.
+	Status(ctx context.Context, app *models.Application, session Session) (Session, error)
+
 	Restart(ctx context.Context, app *models.Application) error
 	Update(ctx context.Context, app *models.Application) error
 }

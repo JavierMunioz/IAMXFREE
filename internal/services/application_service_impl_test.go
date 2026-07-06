@@ -25,14 +25,19 @@ func newServiceWithResolver(t *testing.T, resolver *execution.Resolver) services
 	return services.NewApplicationService(repo, resolver)
 }
 
-// fakeStrategy is a minimal execution.Strategy used only to test
-// ResolveExecutionStrategy/CheckExecutionHealth's wiring; it never runs
-// anything.
+// fakeStrategy is a minimal execution.Strategy used to test
+// ResolveExecutionStrategy/CheckExecutionHealth/ExecutionService's wiring.
 type fakeStrategy struct {
 	name      string
 	runtime   models.Runtime
 	health    execution.HealthCheck
 	healthErr error
+
+	startSession  execution.Session
+	startErr      error
+	stopErr       error
+	statusSession execution.Session
+	statusErr     error
 }
 
 func (s *fakeStrategy) Metadata() execution.Metadata {
@@ -52,10 +57,13 @@ func (s *fakeStrategy) Build(context.Context, *models.Application) error {
 	return execution.ErrNotImplemented
 }
 func (s *fakeStrategy) Start(context.Context, *models.Application) (execution.Session, error) {
-	return execution.Session{}, execution.ErrNotImplemented
+	return s.startSession, s.startErr
 }
 func (s *fakeStrategy) Stop(context.Context, *models.Application, execution.Session) error {
-	return execution.ErrNotImplemented
+	return s.stopErr
+}
+func (s *fakeStrategy) Status(context.Context, *models.Application, execution.Session) (execution.Session, error) {
+	return s.statusSession, s.statusErr
 }
 func (s *fakeStrategy) Restart(context.Context, *models.Application) error {
 	return execution.ErrNotImplemented
