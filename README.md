@@ -46,6 +46,7 @@ reshaping existing code:
 | `internal/tui/wizards/application`   | Composes the wizard engine into the concrete "create application" flow.         |
 | `internal/validation`                | Reusable, composable input validators (Required, Port, Domain, URL, ...).        |
 | `internal/core`                      | Orchestrates services/managers/repositories for each use case.                  |
+| `internal/execution`                 | Technology-agnostic contract for installing/building/running an application.    |
 | `internal/managers`                  | Concrete resource managers: processes, Nginx, Apache, env files, etc.           |
 | `internal/services`                  | Business logic coordinating managers + repositories (e.g. ApplicationService).  |
 | `internal/models`                    | Domain entities (Application, ApplicationDraft, ...).                           |
@@ -94,6 +95,32 @@ grid. Pressing Enter opens a read-only detail view of the selected
 application; `e` (edit) and `d` (delete) are wired up but just report "not
 implemented yet" for now — the keys exist so the experience is already
 defined, even before the behavior behind them is.
+
+### Execution engine
+
+`internal/execution` defines *how* an application would be installed, built,
+started, stopped, restarted and updated — without committing to any
+technology or running anything. Three pieces:
+
+- **`Strategy`** — the contract one technology (Node+npm, Python+uv, Docker
+  Compose, systemd, ...) implements: `CanHandle(app)` (a pure yes/no,
+  no I/O), `Metadata()` (name, supported runtimes/frameworks, requirements,
+  `Capabilities`), and the six lifecycle methods. No concrete strategy exists
+  yet — every lifecycle method a future strategy adds should return
+  `execution.ErrNotImplemented` until it has real logic.
+- **`Registry`** — where strategies register themselves (`Register(strategy)`).
+  Adding a new technology never means editing existing code, only
+  constructing its `Strategy` and registering it.
+- **`Resolver`** — given an `Application`, asks each registered strategy (in
+  registration order) whether it can handle it, and returns the first match.
+  No if/else chain to extend as technologies are added.
+
+`ApplicationService.ResolveExecutionStrategy` is the only integration point
+today: it looks up an application and asks the resolver which strategy would
+manage it, returning that strategy's `Metadata` — never invoking any
+lifecycle method. `internal/cli/root.go` currently wires up an empty
+`Registry`, so this always reports `execution.ErrNoStrategyFound` until the
+first concrete strategy is registered in a later iteration.
 
 `internal/` is used deliberately: nothing here is meant to be imported by
 other Go modules, which keeps the project free to change its internals
