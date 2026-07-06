@@ -13,6 +13,7 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/detail"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/logs"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizards/application"
 )
@@ -182,6 +183,33 @@ func TestRootModelBackMsgReturnsToDashboard(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("expected returning to the dashboard to trigger a reload")
+	}
+}
+
+func TestRootModelOpenLogsMsgSwitchesToLogsScreen(t *testing.T) {
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m.screen = screenDetail
+
+	updated, cmd := m.Update(detail.OpenLogsMsg{AppID: app.ID, Session: services.RunSession{PID: 4242}})
+	m = updated.(RootModel)
+	if m.screen != screenLogs {
+		t.Fatalf("screen = %v, want screenLogs", m.screen)
+	}
+	if cmd == nil {
+		t.Fatal("expected opening the logs view to return its Init command")
+	}
+}
+
+func TestRootModelLogsBackMsgReturnsToDetail(t *testing.T) {
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m.screen = screenLogs
+
+	updated, _ := m.Update(logs.BackMsg{})
+	m = updated.(RootModel)
+	if m.screen != screenDetail {
+		t.Fatalf("screen = %v, want screenDetail", m.screen)
 	}
 }
 

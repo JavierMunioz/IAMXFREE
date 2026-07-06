@@ -13,6 +13,7 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/detail"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/logs"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizards/application"
 )
@@ -23,6 +24,7 @@ const (
 	screenDashboard screen = iota
 	screenWizard
 	screenDetail
+	screenLogs
 )
 
 // applicationRegisteredMsg is emitted once ApplicationService.Register
@@ -51,6 +53,7 @@ type RootModel struct {
 	dashboard dashboard.Model
 	wizard    wizard.Model
 	detail    detail.Model
+	logs      logs.Model
 }
 
 // NewRootModel builds the initial application model.
@@ -99,6 +102,15 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.screen = screenDashboard
 		return m, m.dashboard.Reload()
 
+	case detail.OpenLogsMsg:
+		m.screen = screenLogs
+		m.logs = logs.New(m.execution, msg.AppID, msg.Session)
+		return m, m.logs.Init()
+
+	case logs.BackMsg:
+		m.screen = screenDetail
+		return m, nil
+
 	case applicationRegisteredMsg:
 		m.dashboard = m.dashboard.SetStatus(fmt.Sprintf("Application %q registered.", msg.app.Name))
 		return m, m.dashboard.Reload()
@@ -123,6 +135,11 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.detail.Update(msg)
 		m.detail = updated.(detail.Model)
 		return m, cmd
+
+	case screenLogs:
+		updated, cmd := m.logs.Update(msg)
+		m.logs = updated.(logs.Model)
+		return m, cmd
 	}
 
 	updated, cmd := m.dashboard.Update(msg)
@@ -146,6 +163,8 @@ func (m RootModel) View() string {
 		return m.wizard.View()
 	case screenDetail:
 		return m.detail.View()
+	case screenLogs:
+		return m.logs.View()
 	}
 	return m.dashboard.View()
 }
