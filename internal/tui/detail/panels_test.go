@@ -60,3 +60,47 @@ func TestRenderExecutionPanelShowsRunningSession(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderMetricsPanelShowsNoMetricsYet(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+
+	panel := m.renderMetricsPanel(60)
+	if !strings.Contains(panel, "No metrics yet") {
+		t.Errorf("expected a clear 'no metrics yet' message, got:\n%s", panel)
+	}
+}
+
+func TestRenderMetricsPanelShowsAvailableValues(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m.hasSnapshot = true
+	m.snapshot = services.RuntimeSnapshot{
+		CPUPercent:     services.Metric{Value: 12.5, Available: true},
+		MemoryRSSBytes: services.Metric{Value: 100 * 1024 * 1024, Available: true},
+		MemoryVSZBytes: services.Metric{Available: false},
+	}
+
+	panel := m.renderMetricsPanel(60)
+	for _, want := range []string{"12.5%", "100.0 MB", "n/a"} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("metrics panel missing %q:\n%s", want, panel)
+		}
+	}
+}
+
+func TestViewShowsMetricsPanelOnlyWithASession(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m, _ = update(t, m, appLoadedMsg{app: app})
+
+	if strings.Contains(m.View(), "Metrics") {
+		t.Fatalf("expected no metrics panel without a session, got:\n%s", m.View())
+	}
+
+	m.hasSession = true
+	m.session = services.RunSession{PID: 4242, Status: "running"}
+	if !strings.Contains(m.View(), "Metrics") {
+		t.Fatalf("expected a metrics panel once a session exists, got:\n%s", m.View())
+	}
+}

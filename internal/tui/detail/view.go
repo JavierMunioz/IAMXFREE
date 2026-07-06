@@ -17,6 +17,14 @@ func (m Model) View() string {
 
 	sections := []string{m.renderTopPanel(), m.renderMiddleRow()}
 
+	if m.hasSession {
+		width := m.width - 4
+		if width < 20 {
+			width = 20
+		}
+		sections = append(sections, m.renderMetricsPanel(width))
+	}
+
 	if status := m.renderStatusLine(); status != "" {
 		sections = append(sections, status)
 	}

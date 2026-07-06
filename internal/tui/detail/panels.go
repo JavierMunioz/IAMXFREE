@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/JavierMunioz/IAMXFREE/internal/services"
 )
 
 // renderMiddleRow lays out the technical panel (left) and the execution
@@ -44,6 +46,47 @@ func (m Model) renderTechnicalPanel(width int) string {
 	}
 
 	return panelStyle.Width(width).Height(9).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+// renderMetricsPanel shows the currently tracked session's resource usage
+// as last observed by the Runtime Monitor. It only ever reflects the last
+// explicit refresh (f5) — there is no automatic polling — so a metric this
+// environment cannot report, or that was never fetched, is shown as "n/a"
+// rather than a fabricated value.
+func (m Model) renderMetricsPanel(width int) string {
+	var lines []string
+	lines = append(lines, primaryStyle.Bold(true).Render("Metrics"))
+	lines = append(lines, "")
+
+	if !m.hasSnapshot {
+		lines = append(lines, mutedStyle.Render("No metrics yet."))
+		lines = append(lines, mutedStyle.Render("Press f5 to refresh."))
+	} else {
+		rows := [][2]string{
+			{"CPU", formatPercentMetric(m.snapshot.CPUPercent)},
+			{"Memory (RSS)", formatBytesMetric(m.snapshot.MemoryRSSBytes)},
+			{"Memory (VSZ)", formatBytesMetric(m.snapshot.MemoryVSZBytes)},
+		}
+		for _, row := range rows {
+			lines = append(lines, labelStyle.Render(row[0])+row[1])
+		}
+	}
+
+	return panelStyle.Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+func formatPercentMetric(metric services.Metric) string {
+	if !metric.Available {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.1f%%", metric.Value)
+}
+
+func formatBytesMetric(metric services.Metric) string {
+	if !metric.Available {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.1f MB", metric.Value/(1024*1024))
 }
 
 // renderExecutionPanel shows the live session IAMXFREE is tracking for this

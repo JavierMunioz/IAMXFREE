@@ -47,6 +47,19 @@ type healthLoadedMsg struct {
 // nothing to display in the Strategy/Health fields.
 type healthUnavailableMsg struct{}
 
+// snapshotLoadedMsg carries a fresh RuntimeSnapshot, obtained only through
+// an explicit refresh (see refresh.go) — never automatically.
+type snapshotLoadedMsg struct {
+	snapshot services.RuntimeSnapshot
+}
+
+// snapshotFailedMsg means observing the session's runtime state failed.
+// It never clears an already-displayed snapshot — the metrics panel keeps
+// showing the last known values alongside the error.
+type snapshotFailedMsg struct {
+	err error
+}
+
 // Model is the application detail screen.
 type Model struct {
 	appService       services.ApplicationService
@@ -61,6 +74,9 @@ type Model struct {
 
 	session    services.RunSession
 	hasSession bool
+
+	snapshot    services.RuntimeSnapshot
+	hasSnapshot bool
 
 	status    string
 	statusErr error
@@ -161,6 +177,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case startedMsg:
 		m.session = msg.session
 		m.hasSession = true
+		m.hasSnapshot = false
+		m.snapshot = services.RuntimeSnapshot{}
 		m = m.SetStatus("Application started.")
 		return m, nil
 
@@ -171,6 +189,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stoppedMsg:
 		m.hasSession = false
 		m.session = services.RunSession{}
+		m.hasSnapshot = false
+		m.snapshot = services.RuntimeSnapshot{}
 		m = m.SetStatus("Application stopped.")
 		return m, nil
 
@@ -184,6 +204,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case sessionRefreshFailedMsg:
+		m = m.SetError(msg.err)
+		return m, nil
+
+	case snapshotLoadedMsg:
+		m.snapshot = msg.snapshot
+		m.hasSnapshot = true
+		return m, nil
+
+	case snapshotFailedMsg:
 		m = m.SetError(msg.err)
 		return m, nil
 

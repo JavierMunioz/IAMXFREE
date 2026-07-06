@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 )
 
@@ -91,5 +93,102 @@ func TestRefreshSessionCmdReturnsFailedMsgOnError(t *testing.T) {
 	}
 	if !errors.Is(got.err, wantErr) {
 		t.Errorf("err = %v, want %v", got.err, wantErr)
+	}
+}
+
+func TestRefreshCmdAlsoFetchesSnapshotWithSession(t *testing.T) {
+	app := newTestApp()
+	execSvc := &fakeExecutionService{snapshot: services.RuntimeSnapshot{PID: 4242, State: "running"}}
+	m := New(&fakeAppService{app: app}, execSvc, app.ID)
+	m.hasSession = true
+	m.session = services.RunSession{PID: 4242}
+
+	batch := m.refreshCmd()
+	if batch == nil {
+		t.Fatal("expected refreshCmd to return a command")
+	}
+
+	msg := batch()
+	batchMsg, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected a tea.BatchMsg, got %T", msg)
+	}
+
+	var sawSnapshot bool
+	for _, cmd := range batchMsg {
+		if _, ok := cmd().(snapshotLoadedMsg); ok {
+			sawSnapshot = true
+		}
+	}
+	if !sawSnapshot {
+		t.Fatal("expected refreshCmd's batch to include a snapshotLoadedMsg-producing command")
+	}
+}
+
+func TestSnapshotCmdReturnsSnapshotLoadedMsgOnSuccess(t *testing.T) {
+	app := newTestApp()
+	want := services.RuntimeSnapshot{PID: 4242, State: "running", CPUPercent: services.Metric{Value: 5, Available: true}}
+	execSvc := &fakeExecutionService{snapshot: want}
+	m := New(&fakeAppService{app: app}, execSvc, app.ID)
+	m.session = services.RunSession{PID: 4242}
+
+	msg := m.snapshotCmd()()
+	got, ok := msg.(snapshotLoadedMsg)
+	if !ok {
+		t.Fatalf("expected snapshotLoadedMsg, got %T", msg)
+	}
+	if got.snapshot.PID != 4242 || !got.snapshot.CPUPercent.Available {
+		t.Errorf("snapshot = %+v, unexpected", got.snapshot)
+	}
+}
+
+func TestSnapshotCmdReturnsFailedMsgOnError(t *testing.T) {
+	app := newTestApp()
+	wantErr := errors.New("lookup failed")
+	execSvc := &fakeExecutionService{snapshotErr: wantErr}
+	m := New(&fakeAppService{app: app}, execSvc, app.ID)
+	m.session = services.RunSession{PID: 4242}
+
+	msg := m.snapshotCmd()()
+	got, ok := msg.(snapshotFailedMsg)
+	if !ok {
+		t.Fatalf("expected snapshotFailedMsg, got %T", msg)
+	}
+	if !errors.Is(got.err, wantErr) {
+		t.Errorf("err = %v, want %v", got.err, wantErr)
+	}
+}
+
+func TestSnapshotLoadedMsgUpdatesModel(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+
+	m, _ = update(t, m, snapshotLoadedMsg{snapshot: services.RuntimeSnapshot{PID: 4242}})
+	if !m.hasSnapshot || m.snapshot.PID != 4242 {
+		t.Fatalf("expected the snapshot to be recorded, got hasSnapshot=%v snapshot=%+v", m.hasSnapshot, m.snapshot)
+	}
+}
+
+func TestStartedMsgClearsPreviousSnapshot(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m.hasSnapshot = true
+	m.snapshot = services.RuntimeSnapshot{PID: 1}
+
+	m, _ = update(t, m, startedMsg{session: services.RunSession{PID: 4242, Status: "running"}})
+	if m.hasSnapshot {
+		t.Fatal("expected a fresh start to clear any previously observed snapshot")
+	}
+}
+
+func TestStoppedMsgClearsSnapshot(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m.hasSnapshot = true
+	m.snapshot = services.RuntimeSnapshot{PID: 4242}
+
+	m, _ = update(t, m, stoppedMsg{})
+	if m.hasSnapshot {
+		t.Fatal("expected stopping the session to clear its snapshot")
 	}
 }

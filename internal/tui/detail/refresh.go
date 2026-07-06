@@ -31,13 +31,28 @@ func (m Model) refreshSessionCmd() tea.Cmd {
 	}
 }
 
+// snapshotCmd observes the currently tracked session's real runtime state
+// (process status, CPU/memory usage) through the Runtime Monitor. It is
+// only ever invoked from refreshCmd — there is no automatic polling.
+func (m Model) snapshotCmd() tea.Cmd {
+	service := m.executionService
+	session := m.session
+	return func() tea.Msg {
+		snapshot, err := service.Snapshot(context.Background(), session)
+		if err != nil {
+			return snapshotFailedMsg{err: err}
+		}
+		return snapshotLoadedMsg{snapshot: snapshot}
+	}
+}
+
 // refreshCmd re-queries the strategy's health and, if a session is being
-// tracked, its current status. This is the only refresh IAMXFREE performs —
-// there is no automatic/periodic refresh yet.
+// tracked, its current status and runtime snapshot. This is the only
+// refresh IAMXFREE performs — there is no automatic/periodic refresh yet.
 func (m Model) refreshCmd() tea.Cmd {
 	cmds := []tea.Cmd{m.loadHealthCmd()}
 	if m.hasSession {
-		cmds = append(cmds, m.refreshSessionCmd())
+		cmds = append(cmds, m.refreshSessionCmd(), m.snapshotCmd())
 	}
 	return tea.Batch(cmds...)
 }
