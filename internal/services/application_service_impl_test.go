@@ -38,6 +38,8 @@ type fakeStrategy struct {
 	stopErr       error
 	statusSession execution.Session
 	statusErr     error
+	logStream     execution.LogStream
+	logsErr       error
 }
 
 func (s *fakeStrategy) Metadata() execution.Metadata {
@@ -64,6 +66,9 @@ func (s *fakeStrategy) Stop(context.Context, *models.Application, execution.Sess
 }
 func (s *fakeStrategy) Status(context.Context, *models.Application, execution.Session) (execution.Session, error) {
 	return s.statusSession, s.statusErr
+}
+func (s *fakeStrategy) Logs(context.Context, *models.Application, execution.Session) (execution.LogStream, error) {
+	return s.logStream, s.logsErr
 }
 func (s *fakeStrategy) Restart(context.Context, *models.Application) error {
 	return execution.ErrNotImplemented

@@ -81,6 +81,11 @@ type Strategy interface {
 	// what's shown to the user.
 	Status(ctx context.Context, app *models.Application, session Session) (Session, error)
 
+	// Logs opens a live stream of session's captured output. It never
+	// starts a new process — it attaches to output already being captured
+	// for the process identified by session.
+	Logs(ctx context.Context, app *models.Application, session Session) (LogStream, error)
+
 	Restart(ctx context.Context, app *models.Application) error
 	Update(ctx context.Context, app *models.Application) error
 }

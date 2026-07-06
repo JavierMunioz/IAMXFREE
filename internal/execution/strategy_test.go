@@ -50,6 +50,9 @@ func (s *fakeStrategy) Stop(context.Context, *models.Application, execution.Sess
 func (s *fakeStrategy) Status(context.Context, *models.Application, execution.Session) (execution.Session, error) {
 	return execution.Session{}, execution.ErrNotImplemented
 }
+func (s *fakeStrategy) Logs(context.Context, *models.Application, execution.Session) (execution.LogStream, error) {
+	return nil, execution.ErrNotImplemented
+}
 func (s *fakeStrategy) Restart(context.Context, *models.Application) error {
 	return execution.ErrNotImplemented
 }
@@ -68,6 +71,7 @@ func TestStrategyLifecycleMethodsReportNotImplemented(t *testing.T) {
 	_, readinessErr := s.Readiness(ctx, app)
 	_, startErr := s.Start(ctx, app)
 	_, statusErr := s.Status(ctx, app, execution.Session{})
+	_, logsErr := s.Logs(ctx, app, execution.Session{})
 
 	for _, err := range []error{
 		healthErr,
@@ -77,6 +81,7 @@ func TestStrategyLifecycleMethodsReportNotImplemented(t *testing.T) {
 		startErr,
 		s.Stop(ctx, app, execution.Session{}),
 		statusErr,
+		logsErr,
 		s.Restart(ctx, app),
 		s.Update(ctx, app),
 	} {

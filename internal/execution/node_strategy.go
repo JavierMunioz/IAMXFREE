@@ -53,6 +53,10 @@ func (s *nodeStrategy) Readiness(ctx context.Context, app *models.Application) (
 
 // Start and Stop are implemented in node_strategy_run.go.
 
+func (s *nodeStrategy) Logs(context.Context, *models.Application, Session) (LogStream, error) {
+	return nil, ErrNotImplemented
+}
+
 func (s *nodeStrategy) Install(context.Context, *models.Application) error {
 	return ErrNotImplemented
 }
