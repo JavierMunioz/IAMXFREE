@@ -120,6 +120,33 @@ func TestUpdateAppsLoadFailedSetsError(t *testing.T) {
 	if !errors.Is(m.loadErr, wantErr) {
 		t.Fatalf("loadErr = %v, want %v", m.loadErr, wantErr)
 	}
+	if !errors.Is(m.statusErr, wantErr) {
+		t.Fatalf("statusErr = %v, want %v — a failed refresh must not leave the status line stuck on \"Refreshing…\"", m.statusErr, wantErr)
+	}
+}
+
+func TestAppsLoadedOnInitialLoadDoesNotSetAStatusMessage(t *testing.T) {
+	m := New(&fakeService{}, &fakeExecutionService{}) // loading starts true
+
+	updated, _ := m.Update(appsLoadedMsg{apps: nil})
+	m = updated.(Model)
+
+	if m.status != "" {
+		t.Fatalf("status = %q, want empty on the initial load", m.status)
+	}
+}
+
+func TestAppsLoadedAfterAnExplicitRefreshClearsRefreshingStatus(t *testing.T) {
+	m := New(&fakeService{}, &fakeExecutionService{})
+	m.loading = false // simulate the initial load having already completed
+	m = m.SetStatus("Refreshing…")
+
+	updated, _ := m.Update(appsLoadedMsg{apps: nil})
+	m = updated.(Model)
+
+	if m.status != "Refreshed." {
+		t.Fatalf("status = %q, want %q — pressing r must not leave \"Refreshing…\" shown forever", m.status, "Refreshed.")
+	}
 }
 
 func TestUpdateWindowSize(t *testing.T) {

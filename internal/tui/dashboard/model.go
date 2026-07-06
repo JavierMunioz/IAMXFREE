@@ -165,6 +165,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickCmd()
 
 	case appsLoadedMsg:
+		// wasLoading distinguishes the very first load (Init) from an
+		// explicit refresh (the "r" key) — only the latter gets a
+		// "Refreshed." status, so startup doesn't show a confusing message
+		// the user never asked for.
+		wasLoading := m.loading
 		m.apps = msg.apps
 		m.loading = false
 		m.loadErr = nil
@@ -174,11 +179,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selected < 0 {
 			m.selected = 0
 		}
+		if !wasLoading {
+			m = m.SetStatus("Refreshed.")
+		}
 		return m, tea.Batch(m.loadHealthCmd(), m.loadSessionsCmd())
 
 	case appsLoadFailedMsg:
 		m.loading = false
 		m.loadErr = msg.err
+		m = m.SetError(msg.err)
 		return m, nil
 
 	case healthLoadedMsg:
