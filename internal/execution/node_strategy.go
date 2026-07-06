@@ -41,13 +41,11 @@ func (s *nodeStrategy) CanHandle(app *models.Application) bool {
 	return app.Runtime == models.RuntimeNode && app.Config.PackageManager == "npm"
 }
 
-// HealthCheck, Readiness, Start and Stop are filled in incrementally by
-// later commits; for now they report not implemented like every other
-// still-unimplemented lifecycle method.
+// HealthCheck is implemented in node_strategy_health.go.
 
-func (s *nodeStrategy) HealthCheck(context.Context, *models.Application) (HealthCheck, error) {
-	return HealthCheck{}, ErrNotImplemented
-}
+// Readiness, Start and Stop are filled in incrementally by later commits;
+// for now they report not implemented like every other still-unimplemented
+// lifecycle method.
 
 func (s *nodeStrategy) Readiness(context.Context, *models.Application) (Readiness, error) {
 	return Readiness{}, ErrNotImplemented
