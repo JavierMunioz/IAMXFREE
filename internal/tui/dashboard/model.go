@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -132,8 +133,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View is filled in incrementally as the dashboard's screens are built; for
-// now it renders nothing.
 func (m Model) View() string {
-	return ""
+	sections := []string{m.renderTopBar(), "", m.renderBody()}
+
+	if status := m.renderStatusLine(); status != "" {
+		sections = append(sections, status)
+	}
+
+	return strings.Join(sections, "\n")
+}
+
+// renderStatusLine shows the dashboard's transient status/error message, if
+// any.
+func (m Model) renderStatusLine() string {
+	switch {
+	case m.statusErr != nil:
+		return errorStyle.Render(m.statusErr.Error())
+	case m.status != "":
+		return statusStyle.Render(m.status)
+	default:
+		return ""
+	}
+}
+
+// renderBody is filled in incrementally as the dashboard's screens (grid,
+// empty state, detail view, footer) are built.
+func (m Model) renderBody() string {
+	return mutedStyle.Render("(coming soon)")
 }
