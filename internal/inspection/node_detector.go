@@ -3,6 +3,7 @@ package inspection
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 )
@@ -107,6 +108,16 @@ func (d *nodeDetector) Detect(in DetectionInput) (Detection, bool) {
 	for name, version := range pkg.DevDependencies {
 		deps[name] = version
 	}
+
+	if len(deps) > 0 {
+		names := make([]string, 0, len(deps))
+		for name := range deps {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		detection.Dependencies = names
+	}
+
 	for _, marker := range nodeFrameworkMarkers {
 		if _, ok := deps[marker.pkg]; ok {
 			detection.Framework = marker.framework

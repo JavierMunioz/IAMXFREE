@@ -1,6 +1,7 @@
 package inspection
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -143,6 +144,37 @@ func TestNodeDetectorMissingNameAndVersionAreNoted(t *testing.T) {
 	}
 	if !containsNote(detection.Notes, `"version"`) {
 		t.Errorf("expected a note about the missing version field, got %v", detection.Notes)
+	}
+}
+
+func TestNodeDetectorDependenciesAreSortedAndCombined(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "package.json", `{
+		"name": "app",
+		"dependencies": {"react": "^18.0.0", "axios": "^1.0.0"},
+		"devDependencies": {"typescript": "^5.0.0"}
+	}`)
+
+	detection, ok := NewNodeDetector().Detect(buildInput(t, dir))
+	if !ok {
+		t.Fatal("expected a detection")
+	}
+	want := []string{"axios", "react", "typescript"}
+	if !reflect.DeepEqual(detection.Dependencies, want) {
+		t.Fatalf("Dependencies = %v, want %v", detection.Dependencies, want)
+	}
+}
+
+func TestNodeDetectorNoDependenciesLeavesFieldNil(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "package.json", `{"name": "app"}`)
+
+	detection, ok := NewNodeDetector().Detect(buildInput(t, dir))
+	if !ok {
+		t.Fatal("expected a detection")
+	}
+	if detection.Dependencies != nil {
+		t.Fatalf("Dependencies = %v, want nil", detection.Dependencies)
 	}
 }
 

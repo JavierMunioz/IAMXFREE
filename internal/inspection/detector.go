@@ -52,6 +52,12 @@ type Detection struct {
 	Suggested      SuggestedCommands
 	Confidence     Confidence
 
+	// Dependencies lists every dependency name this Detector could enumerate
+	// (e.g. package.json's combined dependencies + devDependencies keys),
+	// regardless of dependency "kind". Detectors that cannot enumerate
+	// dependencies (Docker, Java via Gradle, ...) leave this nil.
+	Dependencies []string
+
 	// Notes explicitly states what could not be determined, instead of a
 	// Detection silently omitting it.
 	Notes []string
