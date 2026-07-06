@@ -255,3 +255,104 @@ func TestExecutionServiceSnapshotReportsStoppedProcess(t *testing.T) {
 		t.Errorf("State = %q, want %q", snap.State, "stopped")
 	}
 }
+
+func TestExecutionServiceActiveSessionUnknownAppReportsNotFound(t *testing.T) {
+	svc, _ := newExecutionServiceWithStrategy(t, &fakeStrategy{runtime: models.RuntimeNode})
+
+	if _, ok := svc.ActiveSession("never-started"); ok {
+		t.Fatal("expected ActiveSession to report false for an app that was never started")
+	}
+}
+
+func TestExecutionServiceStartTracksActiveSession(t *testing.T) {
+	strategy := &fakeStrategy{
+		runtime: models.RuntimeNode,
+		startSession: execution.Session{
+			PID:     4242,
+			Status:  execution.StatusRunning,
+			Runtime: models.RuntimeNode,
+		},
+	}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	if _, err := svc.Start(context.Background(), app.ID); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	session, ok := svc.ActiveSession(app.ID)
+	if !ok {
+		t.Fatal("expected ActiveSession to report true after Start")
+	}
+	if session.PID != 4242 {
+		t.Errorf("PID = %d, want 4242", session.PID)
+	}
+}
+
+func TestExecutionServiceStopUntracksActiveSession(t *testing.T) {
+	strategy := &fakeStrategy{
+		runtime:      models.RuntimeNode,
+		startSession: execution.Session{PID: 4242, Status: execution.StatusRunning},
+	}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	session, err := svc.Start(context.Background(), app.ID)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := svc.Stop(context.Background(), app.ID, session); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	if _, ok := svc.ActiveSession(app.ID); ok {
+		t.Fatal("expected ActiveSession to report false after Stop")
+	}
+}
+
+func TestExecutionServiceStopKeepsTrackingOnFailure(t *testing.T) {
+	strategy := &fakeStrategy{
+		runtime:      models.RuntimeNode,
+		startSession: execution.Session{PID: 4242, Status: execution.StatusRunning},
+		stopErr:      errors.New("no such process"),
+	}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	session, err := svc.Start(context.Background(), app.ID)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := svc.Stop(context.Background(), app.ID, session); err == nil {
+		t.Fatal("expected Stop to propagate the strategy's error")
+	}
+
+	if _, ok := svc.ActiveSession(app.ID); !ok {
+		t.Fatal("expected ActiveSession to still report true after a failed Stop")
+	}
+}
+
+func TestExecutionServiceRefreshSessionUpdatesActiveSession(t *testing.T) {
+	strategy := &fakeStrategy{
+		runtime:      models.RuntimeNode,
+		startSession: execution.Session{PID: 4242, Status: execution.StatusRunning},
+		statusSession: execution.Session{
+			PID:    4242,
+			Status: execution.StatusStopped,
+		},
+	}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	session, err := svc.Start(context.Background(), app.ID)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if _, err := svc.RefreshSession(context.Background(), app.ID, session); err != nil {
+		t.Fatalf("RefreshSession() error = %v", err)
+	}
+
+	refreshed, ok := svc.ActiveSession(app.ID)
+	if !ok {
+		t.Fatal("expected ActiveSession to still report true after RefreshSession")
+	}
+	if refreshed.Status != string(execution.StatusStopped) {
+		t.Errorf("Status = %q, want %q", refreshed.Status, execution.StatusStopped)
+	}
+}

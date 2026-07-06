@@ -30,6 +30,9 @@ func (f *fakeExecutionService) OpenLogs(context.Context, string, services.RunSes
 func (f *fakeExecutionService) Snapshot(context.Context, services.RunSession) (services.RuntimeSnapshot, error) {
 	return services.RuntimeSnapshot{}, nil
 }
+func (f *fakeExecutionService) ActiveSession(string) (services.RunSession, bool) {
+	return services.RunSession{}, false
+}
 
 // fakeLogStream is a minimal services.LogStream test double, replaying a
 // fixed slice of events and then closing.

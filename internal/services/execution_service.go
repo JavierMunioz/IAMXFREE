@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"sync"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/monitor"
@@ -37,18 +38,57 @@ type ExecutionService interface {
 	// regardless of which strategy started the process. It is always
 	// on-demand; nothing calls this automatically.
 	Snapshot(ctx context.Context, session RunSession) (RuntimeSnapshot, error)
+
+	// ActiveSession reports the most recently started or refreshed session
+	// tracked in memory for appID, if any. It performs no I/O — it is not
+	// a live liveness check, just whatever Start/Stop/RefreshSession last
+	// observed — so a process that exited on its own is only reflected
+	// here after an explicit RefreshSession. This is what lets a screen
+	// other than the one that started a session (e.g. the dashboard) know
+	// one exists.
+	ActiveSession(appID string) (RunSession, bool)
 }
 
 type executionService struct {
 	repo     repositories.ApplicationRepository
 	resolver *execution.Resolver
 	monitor  *monitor.Monitor
+
+	mu       sync.Mutex
+	sessions map[string]execution.Session
 }
 
 // NewExecutionService builds the default ExecutionService, backed by repo,
 // resolver and monitor.
 func NewExecutionService(repo repositories.ApplicationRepository, resolver *execution.Resolver, runtimeMonitor *monitor.Monitor) ExecutionService {
-	return &executionService{repo: repo, resolver: resolver, monitor: runtimeMonitor}
+	return &executionService{
+		repo:     repo,
+		resolver: resolver,
+		monitor:  runtimeMonitor,
+		sessions: make(map[string]execution.Session),
+	}
+}
+
+func (s *executionService) trackSession(appID string, session execution.Session) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessions[appID] = session
+}
+
+func (s *executionService) untrackSession(appID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, appID)
+}
+
+func (s *executionService) ActiveSession(appID string) (RunSession, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[appID]
+	if !ok {
+		return RunSession{}, false
+	}
+	return toRunSession(session), true
 }
 
 func (s *executionService) Start(ctx context.Context, appID string) (RunSession, error) {
@@ -66,6 +106,7 @@ func (s *executionService) Start(ctx context.Context, appID string) (RunSession,
 	if err != nil {
 		return RunSession{}, err
 	}
+	s.trackSession(appID, session)
 	return toRunSession(session), nil
 }
 
@@ -80,7 +121,11 @@ func (s *executionService) Stop(ctx context.Context, appID string, session RunSe
 		return err
 	}
 
-	return strategy.Stop(ctx, app, fromRunSession(session))
+	if err := strategy.Stop(ctx, app, fromRunSession(session)); err != nil {
+		return err
+	}
+	s.untrackSession(appID)
+	return nil
 }
 
 func (s *executionService) RefreshSession(ctx context.Context, appID string, session RunSession) (RunSession, error) {
@@ -98,6 +143,7 @@ func (s *executionService) RefreshSession(ctx context.Context, appID string, ses
 	if err != nil {
 		return RunSession{}, err
 	}
+	s.trackSession(appID, updated)
 	return toRunSession(updated), nil
 }
 

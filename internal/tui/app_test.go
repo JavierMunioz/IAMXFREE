@@ -65,6 +65,9 @@ func (fakeExecutionService) OpenLogs(context.Context, string, services.RunSessio
 func (fakeExecutionService) Snapshot(context.Context, services.RunSession) (services.RuntimeSnapshot, error) {
 	return services.RuntimeSnapshot{}, execution.ErrNotImplemented
 }
+func (fakeExecutionService) ActiveSession(string) (services.RunSession, bool) {
+	return services.RunSession{}, false
+}
 
 type fakeApplicationSetupService struct{}
 

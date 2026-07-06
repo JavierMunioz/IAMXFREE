@@ -68,6 +68,9 @@ func (f *fakeExecutionService) RefreshSession(context.Context, string, services.
 func (f *fakeExecutionService) Snapshot(context.Context, services.RunSession) (services.RuntimeSnapshot, error) {
 	return f.snapshot, f.snapshotErr
 }
+func (f *fakeExecutionService) ActiveSession(string) (services.RunSession, bool) {
+	return services.RunSession{}, false
+}
 
 func newTestApp() *models.Application {
 	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
