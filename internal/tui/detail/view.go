@@ -15,7 +15,7 @@ func (m Model) View() string {
 		return mutedStyle.Render("Loading…")
 	}
 
-	sections := []string{m.renderTopPanel()}
+	sections := []string{m.renderTopPanel(), m.renderMiddleRow()}
 
 	if status := m.renderStatusLine(); status != "" {
 		sections = append(sections, status)
