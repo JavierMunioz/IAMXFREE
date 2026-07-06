@@ -160,6 +160,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.SetError(msg.err)
 		return m, nil
 
+	case stoppedMsg:
+		m.hasSession = false
+		m.session = services.RunSession{}
+		m = m.SetStatus("Application stopped.")
+		return m, nil
+
+	case stopFailedMsg:
+		m = m.SetError(msg.err)
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}

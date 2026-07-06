@@ -19,6 +19,13 @@ func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m = m.SetStatus("Starting…")
 		return m, m.startCmd()
+
+	case "x":
+		if !m.hasSession {
+			return m.SetStatus("No active session to stop."), nil
+		}
+		m = m.SetStatus("Stopping…")
+		return m, m.stopCmd()
 	}
 
 	return m, nil
