@@ -140,6 +140,8 @@ func (m Model) View() string {
 		sections = append(sections, status)
 	}
 
+	sections = append(sections, "", m.renderFooter())
+
 	return strings.Join(sections, "\n")
 }
 
@@ -156,11 +158,13 @@ func (m Model) renderStatusLine() string {
 	}
 }
 
-// renderBody is filled in incrementally as the dashboard's remaining screens
-// (detail view, footer) are built.
 func (m Model) renderBody() string {
-	if len(m.apps) == 0 {
+	switch {
+	case m.mode == viewDetail:
+		return m.renderDetail()
+	case len(m.apps) == 0:
 		return m.renderEmptyState()
+	default:
+		return m.renderGrid()
 	}
-	return m.renderGrid()
 }
