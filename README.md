@@ -47,6 +47,7 @@ reshaping existing code:
 | `internal/validation`                | Reusable, composable input validators (Required, Port, Domain, URL, ...).        |
 | `internal/core`                      | Orchestrates services/managers/repositories for each use case.                  |
 | `internal/execution`                 | Technology-agnostic contract for installing/building/running an application.    |
+| `internal/inspection`                | Reads a directory and detects what kind of project lives there. Read-only.      |
 | `internal/managers`                  | Concrete resource managers: processes, Nginx, Apache, env files, etc.           |
 | `internal/services`                  | Business logic coordinating managers + repositories (e.g. ApplicationService).  |
 | `internal/models`                    | Domain entities (Application, ApplicationDraft, ...).                           |
@@ -121,6 +122,31 @@ manage it, returning that strategy's `Metadata` — never invoking any
 lifecycle method. `internal/cli/root.go` currently wires up an empty
 `Registry`, so this always reports `execution.ErrNoStrategyFound` until the
 first concrete strategy is registered in a later iteration.
+
+### Project Inspector
+
+`internal/inspection` reads a directory and reports what it finds — it never
+runs a command, never installs anything, and never writes to disk. Same
+shape as the execution engine, applied to detection instead of running:
+
+- **`Detector`** — one per technology (`node_detector.go`, `python_detector.go`,
+  `go_detector.go`, `php_detector.go`, `rust_detector.go`, `java_detector.go`,
+  `docker_detector.go`). Each only reads files the `Inspector` already knows
+  exist (via `DetectionInput.Has`/`ReadFile`) and returns a `Detection` — the
+  project's runtime, package manager, framework (only when it can genuinely
+  be inferred), matched marker files, suggested commands, and a `Confidence`.
+  Whatever a `Detector` cannot determine goes into `Notes` instead of being
+  guessed.
+- **`Registry`** — where detectors register themselves; adding a technology
+  never means changing existing code.
+- **`Inspector`** — lists a directory once and asks every registered
+  `Detector` what it recognizes. A `Result` can hold more than one
+  `Detection` (a Node project with a `Dockerfile` is both), and `Primary()`
+  picks the highest-confidence one without discarding the rest.
+  `NewDefaultRegistry()` wires up all seven built-in detectors.
+
+Not integrated anywhere yet — the application-registration wizard is meant
+to use this to autocomplete its fields, but that wiring is a later iteration.
 
 `internal/` is used deliberately: nothing here is meant to be imported by
 other Go modules, which keeps the project free to change its internals
