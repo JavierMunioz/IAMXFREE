@@ -8,7 +8,7 @@ import (
 )
 
 func modelWithApps(n int) Model {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	now := time.Now()
 	for i := 0; i < n; i++ {
 		m.apps = append(m.apps, newApp(string(rune('a'+i)), now))
@@ -123,7 +123,7 @@ func TestEnterEmitsOpenDetailMsgForSelectedApp(t *testing.T) {
 }
 
 func TestEnterDoesNothingWithNoApplications(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	_, cmd := sendKey(t, m, "enter")
 	if cmd != nil {
 		t.Fatal("expected enter to be a no-op with zero applications")

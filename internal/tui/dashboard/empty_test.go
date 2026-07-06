@@ -6,7 +6,7 @@ import (
 )
 
 func TestRenderEmptyStateSuggestsPressingA(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	view := stripANSI(t, m.renderEmptyState())
 
 	if !strings.Contains(view, "No applications registered yet") {
@@ -18,7 +18,7 @@ func TestRenderEmptyStateSuggestsPressingA(t *testing.T) {
 }
 
 func TestBodyRendersEmptyStateWithNoApplications(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	body := stripANSI(t, m.renderBody())
 
 	if !strings.Contains(body, "No applications registered yet") {

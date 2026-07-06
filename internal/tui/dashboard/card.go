@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -57,7 +58,21 @@ func (m Model) renderCard(app *models.Application, selected bool) string {
 		)
 	}
 
+	if session, ok := m.sessionByID[app.ID]; ok && session.Status == "running" {
+		lines = append(lines, mutedStyle.Render(truncate(
+			fmt.Sprintf("PID %d · up %s", session.PID, formatUptime(session.StartedAt)), cardWidth,
+		)))
+	}
+
 	return style.Width(cardWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+// formatUptime reports how long ago startedAt was, rounded to the second.
+// It is computed fresh at render time — the dashboard's existing
+// once-a-second tick re-renders the view, so this reads as a live clock
+// without any new polling of the operating system.
+func formatUptime(startedAt time.Time) string {
+	return time.Since(startedAt).Round(time.Second).String()
 }
 
 // renderHealthLine shows execution health with both an icon and a label —

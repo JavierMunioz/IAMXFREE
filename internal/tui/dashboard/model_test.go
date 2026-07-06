@@ -51,7 +51,7 @@ func newApp(name string, createdAt time.Time) *models.Application {
 }
 
 func TestNewDefaults(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	if m.width != 80 || m.height != 24 {
 		t.Fatalf("width/height = %d/%d, want 80/24", m.width, m.height)
 	}
@@ -66,7 +66,7 @@ func TestReloadSortsByCreatedAt(t *testing.T) {
 		newApp("second", now.Add(time.Minute)),
 		newApp("first", now),
 	}}
-	m := New(svc)
+	m := New(svc, &fakeExecutionService{})
 
 	msg := m.Reload()()
 	loaded, ok := msg.(appsLoadedMsg)
@@ -81,7 +81,7 @@ func TestReloadSortsByCreatedAt(t *testing.T) {
 func TestReloadFailure(t *testing.T) {
 	wantErr := errors.New("boom")
 	svc := &fakeService{listErr: wantErr}
-	m := New(svc)
+	m := New(svc, &fakeExecutionService{})
 
 	msg := m.Reload()()
 	failed, ok := msg.(appsLoadFailedMsg)
@@ -94,7 +94,7 @@ func TestReloadFailure(t *testing.T) {
 }
 
 func TestUpdateAppsLoadedClampsSelection(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	m.selected = 5
 
 	updated, _ := m.Update(appsLoadedMsg{apps: []*models.Application{
@@ -111,7 +111,7 @@ func TestUpdateAppsLoadedClampsSelection(t *testing.T) {
 }
 
 func TestUpdateAppsLoadFailedSetsError(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	wantErr := errors.New("boom")
 
 	updated, _ := m.Update(appsLoadFailedMsg{err: wantErr})
@@ -123,7 +123,7 @@ func TestUpdateAppsLoadFailedSetsError(t *testing.T) {
 }
 
 func TestUpdateWindowSize(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(Model)
 
@@ -133,7 +133,7 @@ func TestUpdateWindowSize(t *testing.T) {
 }
 
 func TestSetStatusAndSetErrorAreMutuallyExclusive(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 
 	m = m.SetStatus("done")
 	if m.status != "done" || m.statusErr != nil {
@@ -151,7 +151,7 @@ func TestAppsLoadedTriggersHealthLoad(t *testing.T) {
 	svc := &fakeService{health: map[string]services.ExecutionHealth{
 		app.ID: {StrategyName: "Node.js (npm)", Healthy: true},
 	}}
-	m := New(svc)
+	m := New(svc, &fakeExecutionService{})
 
 	updated, cmd := m.Update(appsLoadedMsg{apps: []*models.Application{app}})
 	m = updated.(Model)
@@ -159,10 +159,19 @@ func TestAppsLoadedTriggersHealthLoad(t *testing.T) {
 		t.Fatal("expected appsLoadedMsg to also trigger a health-loading command")
 	}
 
-	msg := cmd()
-	loaded, ok := msg.(healthLoadedMsg)
+	batch, ok := cmd().(tea.BatchMsg)
 	if !ok {
-		t.Fatalf("expected healthLoadedMsg, got %T", msg)
+		t.Fatalf("expected a tea.BatchMsg, got %T", cmd())
+	}
+
+	var loaded *healthLoadedMsg
+	for _, batched := range batch {
+		if got, ok := batched().(healthLoadedMsg); ok {
+			loaded = &got
+		}
+	}
+	if loaded == nil {
+		t.Fatal("expected the batch to include a command producing healthLoadedMsg")
 	}
 	if loaded.healthByID[app.ID].StrategyName != "Node.js (npm)" {
 		t.Fatalf("healthByID[%s] = %+v, want strategy Node.js (npm)", app.ID, loaded.healthByID[app.ID])
@@ -170,7 +179,7 @@ func TestAppsLoadedTriggersHealthLoad(t *testing.T) {
 }
 
 func TestHealthLoadedUpdatesModel(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 
 	updated, _ := m.Update(healthLoadedMsg{healthByID: map[string]services.ExecutionHealth{
 		"app-1": {StrategyName: "Node.js (npm)", Healthy: true},
@@ -184,7 +193,7 @@ func TestHealthLoadedUpdatesModel(t *testing.T) {
 
 func TestLoadHealthCmdOmitsAppsWithoutAResolvableStrategy(t *testing.T) {
 	app := newApp("my-api", time.Now())
-	m := New(&fakeService{}) // no health configured -> ErrNoStrategyFound for every app
+	m := New(&fakeService{}, &fakeExecutionService{}) // no health configured -> ErrNoStrategyFound for every app
 	m.apps = []*models.Application{app}
 
 	msg := m.loadHealthCmd()()
@@ -197,8 +206,54 @@ func TestLoadHealthCmdOmitsAppsWithoutAResolvableStrategy(t *testing.T) {
 	}
 }
 
+func TestLoadSessionsCmdOmitsAppsWithoutAnActiveSession(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	m := New(&fakeService{}, &fakeExecutionService{}) // no sessions configured
+	m.apps = []*models.Application{app}
+
+	msg := m.loadSessionsCmd()()
+	loaded, ok := msg.(sessionsLoadedMsg)
+	if !ok {
+		t.Fatalf("expected sessionsLoadedMsg, got %T", msg)
+	}
+	if _, present := loaded.sessionByID[app.ID]; present {
+		t.Fatal("expected an app with no active session to be omitted from sessionByID")
+	}
+}
+
+func TestLoadSessionsCmdIncludesActiveSessions(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	execSvc := &fakeExecutionService{sessionByID: map[string]services.RunSession{
+		app.ID: {PID: 4242, Status: "running"},
+	}}
+	m := New(&fakeService{}, execSvc)
+	m.apps = []*models.Application{app}
+
+	msg := m.loadSessionsCmd()()
+	loaded, ok := msg.(sessionsLoadedMsg)
+	if !ok {
+		t.Fatalf("expected sessionsLoadedMsg, got %T", msg)
+	}
+	if loaded.sessionByID[app.ID].PID != 4242 {
+		t.Fatalf("sessionByID[%s] = %+v, want PID 4242", app.ID, loaded.sessionByID[app.ID])
+	}
+}
+
+func TestSessionsLoadedMsgUpdatesModel(t *testing.T) {
+	m := New(&fakeService{}, &fakeExecutionService{})
+
+	updated, _ := m.Update(sessionsLoadedMsg{sessionByID: map[string]services.RunSession{
+		"app-1": {PID: 4242, Status: "running"},
+	}})
+	m = updated.(Model)
+
+	if m.sessionByID["app-1"].PID != 4242 {
+		t.Fatalf("sessionByID = %+v, want an entry for app-1", m.sessionByID)
+	}
+}
+
 func TestTickReschedulesItself(t *testing.T) {
-	m := New(&fakeService{})
+	m := New(&fakeService{}, &fakeExecutionService{})
 	_, cmd := m.Update(tickMsg(time.Now()))
 	if cmd == nil {
 		t.Fatal("expected tick to reschedule itself")

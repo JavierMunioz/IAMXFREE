@@ -40,17 +40,27 @@ type healthLoadedMsg struct {
 	healthByID map[string]services.ExecutionHealth
 }
 
+// sessionsLoadedMsg carries active sessions, keyed by application ID, for
+// whichever applications ExecutionService is currently tracking a session
+// for. An application missing from the map simply has none — that's not an
+// error, just nothing to show.
+type sessionsLoadedMsg struct {
+	sessionByID map[string]services.RunSession
+}
+
 type tickMsg time.Time
 
 // Model is the dashboard screen. It depends only on services.ApplicationService
-// — never on a repository directly — for every piece of application data it
-// shows.
+// and services.ExecutionService — never on a repository or internal/monitor
+// directly — for every piece of application data it shows.
 type Model struct {
-	service services.ApplicationService
+	service          services.ApplicationService
+	executionService services.ExecutionService
 
-	apps       []*models.Application
-	healthByID map[string]services.ExecutionHealth
-	selected   int
+	apps        []*models.Application
+	healthByID  map[string]services.ExecutionHealth
+	sessionByID map[string]services.RunSession
+	selected    int
 
 	width  int
 	height int
@@ -62,9 +72,9 @@ type Model struct {
 	loadErr error
 }
 
-// New builds a dashboard backed by service.
-func New(service services.ApplicationService) Model {
-	return Model{service: service, width: 80, height: 24, loading: true}
+// New builds a dashboard backed by service and executionService.
+func New(service services.ApplicationService, executionService services.ExecutionService) Model {
+	return Model{service: service, executionService: executionService, width: 80, height: 24, loading: true}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -107,6 +117,24 @@ func (m Model) loadHealthCmd() tea.Cmd {
 	}
 }
 
+// loadSessionsCmd fetches the active session for every currently loaded
+// application, keyed by application ID. It performs no I/O — ActiveSession
+// is a pure in-memory lookup — so this never fails; an application with no
+// tracked session is simply left out of the result.
+func (m Model) loadSessionsCmd() tea.Cmd {
+	execService := m.executionService
+	apps := m.apps
+	return func() tea.Msg {
+		sessionByID := make(map[string]services.RunSession, len(apps))
+		for _, app := range apps {
+			if session, ok := execService.ActiveSession(app.ID); ok {
+				sessionByID[app.ID] = session
+			}
+		}
+		return sessionsLoadedMsg{sessionByID: sessionByID}
+	}
+}
+
 func tickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
@@ -146,7 +174,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selected < 0 {
 			m.selected = 0
 		}
-		return m, m.loadHealthCmd()
+		return m, tea.Batch(m.loadHealthCmd(), m.loadSessionsCmd())
 
 	case appsLoadFailedMsg:
 		m.loading = false
@@ -155,6 +183,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case healthLoadedMsg:
 		m.healthByID = msg.healthByID
+		return m, nil
+
+	case sessionsLoadedMsg:
+		m.sessionByID = msg.sessionByID
 		return m, nil
 
 	case tea.KeyMsg:

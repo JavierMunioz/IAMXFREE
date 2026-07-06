@@ -63,7 +63,7 @@ func NewRootModel(service services.ApplicationService, execution services.Execut
 		execution: execution,
 		setup:     setup,
 		screen:    screenDashboard,
-		dashboard: dashboard.New(service),
+		dashboard: dashboard.New(service, execution),
 	}
 }
 
