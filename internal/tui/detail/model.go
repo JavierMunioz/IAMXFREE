@@ -47,6 +47,17 @@ type healthLoadedMsg struct {
 // nothing to display in the Strategy/Health fields.
 type healthUnavailableMsg struct{}
 
+// activeSessionLoadedMsg carries whatever session ExecutionService is
+// already tracking for this application, if any. This is how the screen
+// learns about a session it did not itself start in this Model instance —
+// e.g. one started the last time this screen was open, before the user
+// went back to the dashboard and reopened it, which otherwise would look
+// exactly like nothing was ever started.
+type activeSessionLoadedMsg struct {
+	session services.RunSession
+	found   bool
+}
+
 // snapshotLoadedMsg carries a fresh RuntimeSnapshot, obtained only through
 // an explicit refresh (see refresh.go) — never automatically.
 type snapshotLoadedMsg struct {
@@ -101,7 +112,7 @@ func New(appService services.ApplicationService, executionService services.Execu
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadAppCmd(), m.loadHealthCmd())
+	return tea.Batch(m.loadAppCmd(), m.loadHealthCmd(), m.loadActiveSessionCmd())
 }
 
 func (m Model) loadAppCmd() tea.Cmd {
@@ -127,6 +138,20 @@ func (m Model) loadHealthCmd() tea.Cmd {
 			return healthUnavailableMsg{}
 		}
 		return healthLoadedMsg{strategyName: health.StrategyName, healthy: health.Healthy}
+	}
+}
+
+// loadActiveSessionCmd asks ExecutionService whether it's already tracking
+// a session for this application — populated in memory by a previous
+// Start/RefreshSession call, possibly from an earlier time this screen was
+// open. It performs no I/O (ActiveSession is a pure in-memory lookup), so
+// this never fails.
+func (m Model) loadActiveSessionCmd() tea.Cmd {
+	service := m.executionService
+	id := m.appID
+	return func() tea.Msg {
+		session, ok := service.ActiveSession(id)
+		return activeSessionLoadedMsg{session: session, found: ok}
 	}
 }
 
@@ -172,6 +197,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case healthUnavailableMsg:
 		m.healthKnown = false
 		m.strategyName = ""
+		return m, nil
+
+	case activeSessionLoadedMsg:
+		if msg.found {
+			m.session = msg.session
+			m.hasSession = true
+		}
 		return m, nil
 
 	case startedMsg:

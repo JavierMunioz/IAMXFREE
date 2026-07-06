@@ -51,6 +51,9 @@ type fakeExecutionService struct {
 	logsErr      error
 	snapshot     services.RuntimeSnapshot
 	snapshotErr  error
+
+	activeSession    services.RunSession
+	hasActiveSession bool
 }
 
 func (f *fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
@@ -69,7 +72,7 @@ func (f *fakeExecutionService) Snapshot(context.Context, services.RunSession) (s
 	return f.snapshot, f.snapshotErr
 }
 func (f *fakeExecutionService) ActiveSession(string) (services.RunSession, bool) {
-	return services.RunSession{}, false
+	return f.activeSession, f.hasActiveSession
 }
 
 func newTestApp() *models.Application {
@@ -193,6 +196,44 @@ func TestQuitReturnsCommand(t *testing.T) {
 	_, cmd := m.handleKey(keyMsg("q"))
 	if cmd == nil {
 		t.Fatal("expected quit to return a command")
+	}
+}
+
+func TestInitHydratesAnAlreadyTrackedSession(t *testing.T) {
+	app := newTestApp()
+	execSvc := &fakeExecutionService{
+		activeSession:    services.RunSession{PID: 4242, Status: "running"},
+		hasActiveSession: true,
+	}
+	m := New(&fakeAppService{app: app}, execSvc, app.ID)
+
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("expected Init to return a command")
+	}
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected a tea.BatchMsg, got %T", cmd())
+	}
+
+	for _, batched := range batch {
+		if msg, ok := batched().(activeSessionLoadedMsg); ok {
+			m, _ = update(t, m, msg)
+		}
+	}
+
+	if !m.hasSession || m.session.PID != 4242 {
+		t.Fatalf("expected the already-tracked session to be hydrated, got hasSession=%v session=%+v", m.hasSession, m.session)
+	}
+}
+
+func TestInitLeavesNoSessionWhenNoneTracked(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+
+	m, _ = update(t, m, activeSessionLoadedMsg{found: false})
+	if m.hasSession {
+		t.Fatal("expected hasSession to stay false when ExecutionService tracks nothing")
 	}
 }
 
