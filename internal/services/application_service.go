@@ -6,11 +6,11 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 )
 
-// ApplicationService will define the business operations available for
-// managing applications, coordinating an ApplicationRepository with the
-// process/reverse-proxy/SSL managers once they exist. It is declared now,
-// without an implementation, so internal/core and internal/tui can be
-// designed against a stable contract before that logic is built.
+// ApplicationService defines the business operations available for managing
+// applications. It sits between presentation (TUI/CLI) and persistence: it
+// validates, decides how conflicts are handled, and will coordinate the
+// process/reverse-proxy/SSL managers once they exist. Presentation code
+// depends only on this interface, never on ApplicationRepository directly.
 type ApplicationService interface {
 	Register(ctx context.Context, app *models.Application) error
 	Get(ctx context.Context, id string) (*models.Application, error)
