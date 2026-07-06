@@ -12,6 +12,13 @@ import (
 // change with the terminal's theme. Status colors are reserved — they are
 // never reused for anything but application state, and always render with
 // an icon and a text label so meaning never rides on color alone.
+// cardWidth and cardGap drive both the card rendering and the grid
+// navigation math (columns per row), so the two never disagree.
+const (
+	cardWidth = 32
+	cardGap   = 2
+)
+
 var (
 	colorPrimary = lipgloss.AdaptiveColor{Light: "#0b0b0b", Dark: "#ffffff"}
 	colorMuted   = lipgloss.AdaptiveColor{Light: "#898781", Dark: "#898781"}

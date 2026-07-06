@@ -124,6 +124,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.loadErr = msg.err
 		return m, nil
+
+	case tea.KeyMsg:
+		return m.handleKey(msg)
 	}
 
 	return m, nil
