@@ -234,3 +234,27 @@ func TestLinuxHostDirExists(t *testing.T) {
 		t.Errorf("DirExists(missing) = %v, %v, want false, nil", ok, err)
 	}
 }
+
+func TestLinuxHostReadFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "package.json")
+	if err := os.WriteFile(file, []byte(`{"name":"my-api"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	host := runtimehost.NewLinuxHost()
+	data, err := host.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if string(data) != `{"name":"my-api"}` {
+		t.Errorf("ReadFile() = %q, want %q", data, `{"name":"my-api"}`)
+	}
+}
+
+func TestLinuxHostReadFileMissing(t *testing.T) {
+	host := runtimehost.NewLinuxHost()
+	if _, err := host.ReadFile(filepath.Join(t.TempDir(), "missing.json")); err == nil {
+		t.Fatal("expected an error for a missing file")
+	}
+}

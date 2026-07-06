@@ -136,3 +136,7 @@ func (h *LinuxHost) DirExists(path string) (bool, error) {
 	}
 	return info.IsDir(), nil
 }
+
+func (h *LinuxHost) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}

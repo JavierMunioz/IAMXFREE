@@ -3,6 +3,7 @@ package runtimehosttest_test
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
@@ -137,4 +138,35 @@ func TestFakeHostFileAndDirExists(t *testing.T) {
 
 func TestFakeHostSatisfiesHostInterface(t *testing.T) {
 	var _ runtimehost.Host = runtimehosttest.NewFakeHost()
+}
+
+func TestFakeHostReadFileConfigured(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().
+		WithReadFile("/srv/apps/my-api/package.json", []byte(`{"name":"my-api"}`), nil)
+
+	data, err := host.ReadFile("/srv/apps/my-api/package.json")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if string(data) != `{"name":"my-api"}` {
+		t.Fatalf("ReadFile() = %q, want %q", data, `{"name":"my-api"}`)
+	}
+}
+
+func TestFakeHostReadFileUnconfiguredReturnsNotExist(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+
+	if _, err := host.ReadFile("/srv/apps/my-api/package.json"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ReadFile() error = %v, want os.ErrNotExist", err)
+	}
+}
+
+func TestFakeHostReadFileConfiguredError(t *testing.T) {
+	wantErr := errors.New("permission denied")
+	host := runtimehosttest.NewFakeHost().
+		WithReadFile("/srv/apps/my-api/package.json", nil, wantErr)
+
+	if _, err := host.ReadFile("/srv/apps/my-api/package.json"); !errors.Is(err, wantErr) {
+		t.Fatalf("ReadFile() error = %v, want %v", err, wantErr)
+	}
 }

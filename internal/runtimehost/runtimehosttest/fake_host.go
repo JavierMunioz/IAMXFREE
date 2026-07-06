@@ -3,6 +3,7 @@ package runtimehosttest
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
@@ -14,25 +15,29 @@ import (
 // the real operating system, so tests never depend on the machine they run
 // on.
 type FakeHost struct {
-	lookPaths  map[string]runtimehost.ToolAvailability
-	versions   map[string]runtimehost.ToolInfo
-	runResults map[string]runtimehost.CommandResult
-	runErrors  map[string]error
-	workingDir string
-	files      map[string]bool
-	dirs       map[string]bool
+	lookPaths    map[string]runtimehost.ToolAvailability
+	versions     map[string]runtimehost.ToolInfo
+	runResults   map[string]runtimehost.CommandResult
+	runErrors    map[string]error
+	workingDir   string
+	files        map[string]bool
+	dirs         map[string]bool
+	fileContents map[string][]byte
+	fileErrors   map[string]error
 }
 
 // NewFakeHost returns an empty FakeHost; every operation reports "not
 // found"/empty until configured with a With* method.
 func NewFakeHost() *FakeHost {
 	return &FakeHost{
-		lookPaths:  make(map[string]runtimehost.ToolAvailability),
-		versions:   make(map[string]runtimehost.ToolInfo),
-		runResults: make(map[string]runtimehost.CommandResult),
-		runErrors:  make(map[string]error),
-		files:      make(map[string]bool),
-		dirs:       make(map[string]bool),
+		lookPaths:    make(map[string]runtimehost.ToolAvailability),
+		versions:     make(map[string]runtimehost.ToolInfo),
+		runResults:   make(map[string]runtimehost.CommandResult),
+		runErrors:    make(map[string]error),
+		files:        make(map[string]bool),
+		dirs:         make(map[string]bool),
+		fileContents: make(map[string][]byte),
+		fileErrors:   make(map[string]error),
 	}
 }
 
@@ -74,6 +79,13 @@ func (f *FakeHost) WithFile(path string) *FakeHost {
 // WithDir makes DirExists(path) return true.
 func (f *FakeHost) WithDir(path string) *FakeHost {
 	f.dirs[path] = true
+	return f
+}
+
+// WithReadFile makes ReadFile(path) return content and err.
+func (f *FakeHost) WithReadFile(path string, content []byte, err error) *FakeHost {
+	f.fileContents[path] = content
+	f.fileErrors[path] = err
 	return f
 }
 
@@ -121,6 +133,16 @@ func (f *FakeHost) FileExists(path string) (bool, error) {
 
 func (f *FakeHost) DirExists(path string) (bool, error) {
 	return f.dirs[path], nil
+}
+
+func (f *FakeHost) ReadFile(path string) ([]byte, error) {
+	if err, ok := f.fileErrors[path]; ok && err != nil {
+		return nil, err
+	}
+	if content, ok := f.fileContents[path]; ok {
+		return content, nil
+	}
+	return nil, os.ErrNotExist
 }
 
 func commandKey(name string, args []string) string {

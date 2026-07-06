@@ -34,4 +34,10 @@ type Host interface {
 
 	// DirExists reports whether path exists and is a directory.
 	DirExists(path string) (bool, error)
+
+	// ReadFile reads and returns the contents of the file at path. Callers
+	// needing to inspect a project's files (e.g. an execution strategy
+	// checking package.json) use this instead of touching the filesystem
+	// directly.
+	ReadFile(path string) ([]byte, error)
 }
