@@ -30,6 +30,10 @@ type ChoiceStep struct {
 	customMode  bool
 	customInput textinput.Model
 	err         error
+
+	prefill       func() string
+	everPrefilled bool
+	lastPrefilled string
 }
 
 // NewChoiceStep builds a ChoiceStep over choices. When allowCustom is true,
@@ -48,11 +52,39 @@ func NewChoiceStep(title, prompt string, choices []Choice, allowCustom bool) *Ch
 	}
 }
 
+// WithPrefill registers fn as a source of an initial selection for this
+// step. Like TextStep.WithPrefill, it is re-evaluated on every focus but
+// only applied when the current selection still matches whatever fn last
+// returned — a choice the user made themselves is never overwritten. fn
+// must return one of choices' Value strings (or "" for no opinion); a value
+// that doesn't match any known choice is ignored rather than guessed at.
+func (s *ChoiceStep) WithPrefill(fn func() string) *ChoiceStep {
+	s.prefill = fn
+	return s
+}
+
 func (s *ChoiceStep) Title() string { return s.title }
 
 func (s *ChoiceStep) Focus() {
 	s.err = nil
 	s.customMode = false
+	if s.prefill != nil && (!s.everPrefilled || s.Value() == s.lastPrefilled) {
+		s.applyPrefillValue(s.prefill())
+		s.lastPrefilled = s.Value()
+		s.everPrefilled = true
+	}
+}
+
+func (s *ChoiceStep) applyPrefillValue(value string) {
+	if value == "" {
+		return
+	}
+	for i, choice := range s.choices {
+		if choice.Value == value {
+			s.cursor = i
+			return
+		}
+	}
 }
 
 func (s *ChoiceStep) Modal() bool { return s.customMode }

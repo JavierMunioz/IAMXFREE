@@ -61,3 +61,43 @@ func TestTextStepModalIsAlwaysFalse(t *testing.T) {
 		t.Fatal("TextStep should never be modal")
 	}
 }
+
+func TestTextStepPrefillAppliesOnFirstFocus(t *testing.T) {
+	step := wizard.NewTextStep("Name", "Application name:", "", nil).
+		WithPrefill(func() string { return "my-api" })
+
+	step.Focus()
+
+	if got := step.Value(); got != "my-api" {
+		t.Fatalf("Value() = %q, want %q", got, "my-api")
+	}
+}
+
+func TestTextStepPrefillNeverOverwritesUserEdit(t *testing.T) {
+	value := "my-api"
+	step := wizard.NewTextStep("Name", "Application name:", "", nil).
+		WithPrefill(func() string { return value })
+
+	step.Focus()
+	typeRunes(step, "-custom")   // user edits the prefilled value
+	value = "a-different-name"   // upstream data changes (e.g. re-inspection)
+	step.Focus()                 // step is revisited
+
+	if got := step.Value(); got != "my-api-custom" {
+		t.Fatalf("Value() = %q, want %q (user edit preserved)", got, "my-api-custom")
+	}
+}
+
+func TestTextStepPrefillRefreshesUntouchedValue(t *testing.T) {
+	value := "my-api"
+	step := wizard.NewTextStep("Name", "Application name:", "", nil).
+		WithPrefill(func() string { return value })
+
+	step.Focus() // applies "my-api", untouched by the user
+	value = "a-different-name"
+	step.Focus() // should refresh since the user never edited it
+
+	if got := step.Value(); got != "a-different-name" {
+		t.Fatalf("Value() = %q, want %q (refreshed since untouched)", got, "a-different-name")
+	}
+}

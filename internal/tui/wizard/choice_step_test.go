@@ -105,3 +105,40 @@ func TestChoiceStepEscInCustomModeReturnsToList(t *testing.T) {
 		t.Fatalf("Value() = %q, want empty after discarding custom entry", got)
 	}
 }
+
+func TestChoiceStepPrefillSelectsMatchingOption(t *testing.T) {
+	step := wizard.NewChoiceStep("Type", "Application type:", newTestChoices(), false).
+		WithPrefill(func() string { return "backend" })
+
+	step.Focus()
+
+	if got := step.Value(); got != "backend" {
+		t.Fatalf("Value() = %q, want %q", got, "backend")
+	}
+}
+
+func TestChoiceStepPrefillIgnoresUnknownValue(t *testing.T) {
+	step := wizard.NewChoiceStep("Type", "Application type:", newTestChoices(), false).
+		WithPrefill(func() string { return "not-a-known-choice" })
+
+	step.Focus()
+
+	if got := step.Value(); got != "frontend" {
+		t.Fatalf("Value() = %q, want %q (default, unknown prefill ignored)", got, "frontend")
+	}
+}
+
+func TestChoiceStepPrefillNeverOverwritesUserSelection(t *testing.T) {
+	value := "backend"
+	step := wizard.NewChoiceStep("Type", "Application type:", newTestChoices(), false).
+		WithPrefill(func() string { return value })
+
+	step.Focus()                                    // selects backend
+	step.Update(tea.KeyMsg{Type: tea.KeyUp})         // user picks frontend instead
+	value = "backend"                                // upstream unchanged, still "backend"
+	step.Focus()                                     // revisited
+
+	if got := step.Value(); got != "frontend" {
+		t.Fatalf("Value() = %q, want %q (user selection preserved)", got, "frontend")
+	}
+}

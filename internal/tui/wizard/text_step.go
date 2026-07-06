@@ -17,6 +17,10 @@ type TextStep struct {
 	validate validation.Validator
 	input    textinput.Model
 	err      error
+
+	prefill       func() string
+	everPrefilled bool
+	lastPrefilled string
 }
 
 // NewTextStep builds a TextStep. validate may be nil to accept any value.
@@ -33,10 +37,27 @@ func NewTextStep(title, prompt, placeholder string, validate validation.Validato
 	}
 }
 
+// WithPrefill registers fn as a source of an initial value for this step.
+// It is called every time the step is focused, but only applied when the
+// current value still matches whatever fn last returned — so a value the
+// user typed themselves is never overwritten, while a value nothing has
+// touched yet stays in sync with upstream data (e.g. a prior step's
+// analysis being re-run after the user goes back and changes it).
+func (s *TextStep) WithPrefill(fn func() string) *TextStep {
+	s.prefill = fn
+	return s
+}
+
 func (s *TextStep) Title() string { return s.title }
 
 func (s *TextStep) Focus() {
 	s.err = nil
+	if s.prefill != nil && (!s.everPrefilled || s.input.Value() == s.lastPrefilled) {
+		next := s.prefill()
+		s.input.SetValue(next)
+		s.lastPrefilled = next
+		s.everPrefilled = true
+	}
 	s.input.Focus()
 }
 
