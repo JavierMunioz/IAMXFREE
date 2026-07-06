@@ -473,3 +473,135 @@ func TestNewExecutionServiceDiscardsADeadSessionFromDisk(t *testing.T) {
 		t.Fatal("expected the dead session to be removed from the repository too")
 	}
 }
+
+func TestExecutionServiceStartSyncsApplicationStatusToRunning(t *testing.T) {
+	ctx := context.Background()
+	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApplicationRepository() error = %v", err)
+	}
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	app.Status = models.StatusStopped
+	if err := repo.Create(ctx, app); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	strategy := &fakeStrategy{
+		runtime:      models.RuntimeNode,
+		startSession: execution.Session{PID: 4242, Status: execution.StatusRunning},
+	}
+	registry := execution.NewRegistry()
+	registry.Register(strategy)
+	resolver := execution.NewResolver(registry)
+	svc := services.NewExecutionService(repo, resolver, monitor.New(runtimehosttest.NewFakeHost()), newSessionRepo(t))
+
+	if _, err := svc.Start(ctx, app.ID); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	got, err := repo.FindByID(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if got.Status != models.StatusRunning {
+		t.Fatalf("Status = %q, want %q", got.Status, models.StatusRunning)
+	}
+}
+
+func TestExecutionServiceStopSyncsApplicationStatusToStopped(t *testing.T) {
+	ctx := context.Background()
+	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApplicationRepository() error = %v", err)
+	}
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	app.Status = models.StatusRunning
+	if err := repo.Create(ctx, app); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	strategy := &fakeStrategy{runtime: models.RuntimeNode}
+	registry := execution.NewRegistry()
+	registry.Register(strategy)
+	resolver := execution.NewResolver(registry)
+	svc := services.NewExecutionService(repo, resolver, monitor.New(runtimehosttest.NewFakeHost()), newSessionRepo(t))
+
+	if err := svc.Stop(ctx, app.ID, services.RunSession{PID: 4242}); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	got, err := repo.FindByID(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if got.Status != models.StatusStopped {
+		t.Fatalf("Status = %q, want %q", got.Status, models.StatusStopped)
+	}
+}
+
+func TestExecutionServiceRefreshSessionSyncsApplicationStatus(t *testing.T) {
+	ctx := context.Background()
+	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApplicationRepository() error = %v", err)
+	}
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	app.Status = models.StatusRunning
+	if err := repo.Create(ctx, app); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	strategy := &fakeStrategy{
+		runtime:       models.RuntimeNode,
+		statusSession: execution.Session{PID: 4242, Status: execution.StatusStopped},
+	}
+	registry := execution.NewRegistry()
+	registry.Register(strategy)
+	resolver := execution.NewResolver(registry)
+	svc := services.NewExecutionService(repo, resolver, monitor.New(runtimehosttest.NewFakeHost()), newSessionRepo(t))
+
+	if _, err := svc.RefreshSession(ctx, app.ID, services.RunSession{PID: 4242}); err != nil {
+		t.Fatalf("RefreshSession() error = %v", err)
+	}
+
+	got, err := repo.FindByID(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if got.Status != models.StatusStopped {
+		t.Fatalf("Status = %q, want %q — RefreshSession must notice the process died and correct the badge", got.Status, models.StatusStopped)
+	}
+}
+
+func TestNewExecutionServiceHydrationSyncsApplicationStatusToRunning(t *testing.T) {
+	ctx := context.Background()
+	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApplicationRepository() error = %v", err)
+	}
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Status = models.StatusStopped
+	if err := repo.Create(ctx, app); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	resolver := execution.NewResolver(execution.NewRegistry())
+
+	sessionRepo := newSessionRepo(t)
+	if err := sessionRepo.Save(ctx, app.ID, execution.Session{PID: 4242, Status: execution.StatusRunning}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	host := runtimehosttest.NewFakeHost().WithRunningPID(4242, true)
+	services.NewExecutionService(repo, resolver, monitor.New(host), sessionRepo)
+
+	got, err := repo.FindByID(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if got.Status != models.StatusRunning {
+		t.Fatalf("Status = %q, want %q — a still-running rehydrated session must correct a stale \"stopped\" badge on startup", got.Status, models.StatusRunning)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
+	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/monitor"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories"
 )
@@ -92,6 +93,10 @@ func (s *executionService) hydrateSessions(ctx context.Context) {
 			continue
 		}
 		s.sessions[appID] = session
+
+		if app, err := s.repo.FindByID(ctx, appID); err == nil {
+			s.syncApplicationStatus(ctx, app, execution.StatusRunning)
+		}
 	}
 }
 
@@ -114,6 +119,35 @@ func (s *executionService) untrackSession(ctx context.Context, appID string) {
 	s.mu.Unlock()
 
 	_ = s.sessionRepo.Delete(ctx, appID)
+}
+
+// syncApplicationStatus best-effort persists app's Status to match status —
+// the session's lifecycle state — so the badge shown on the dashboard and
+// detail screens reflects reality instead of whatever it was when the
+// application was registered (or last edited). A failure to persist here
+// doesn't affect the caller: the process itself already started, stopped,
+// or was refreshed successfully regardless.
+func (s *executionService) syncApplicationStatus(ctx context.Context, app *models.Application, status execution.Status) {
+	app.Status = applicationStatusFor(status)
+	app.Touch()
+	_ = s.repo.Update(ctx, app)
+}
+
+// applicationStatusFor maps a Session's technology-agnostic lifecycle
+// Status onto the coarser models.ApplicationStatus shown throughout the
+// TUI. Starting/stopping/stopped all collapse to StatusStopped — the
+// dashboard has no notion of those in-between states — while Failed maps
+// to StatusError so a crashed process reads differently from one that was
+// cleanly stopped.
+func applicationStatusFor(status execution.Status) models.ApplicationStatus {
+	switch status {
+	case execution.StatusRunning:
+		return models.StatusRunning
+	case execution.StatusFailed:
+		return models.StatusError
+	default:
+		return models.StatusStopped
+	}
 }
 
 func (s *executionService) ActiveSession(appID string) (RunSession, bool) {
@@ -142,6 +176,7 @@ func (s *executionService) Start(ctx context.Context, appID string) (RunSession,
 		return RunSession{}, err
 	}
 	s.trackSession(ctx, appID, session)
+	s.syncApplicationStatus(ctx, app, session.Status)
 	return toRunSession(session), nil
 }
 
@@ -160,6 +195,7 @@ func (s *executionService) Stop(ctx context.Context, appID string, session RunSe
 		return err
 	}
 	s.untrackSession(ctx, appID)
+	s.syncApplicationStatus(ctx, app, execution.StatusStopped)
 	return nil
 }
 
@@ -179,6 +215,7 @@ func (s *executionService) RefreshSession(ctx context.Context, appID string, ses
 		return RunSession{}, err
 	}
 	s.trackSession(ctx, appID, updated)
+	s.syncApplicationStatus(ctx, app, updated.Status)
 	return toRunSession(updated), nil
 }
 
