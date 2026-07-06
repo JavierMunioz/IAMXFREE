@@ -12,6 +12,12 @@ infrastructure managers (Nginx, Apache, process supervision, systemd, Docker,
 etc.) do not exist yet — application status shown today comes from the
 stored record, not a live process.
 
+Registering an application analyzes the project path first: the wizard asks
+for a path, inspects it, shows what it found, and pre-fills name, type,
+framework, runtime, package manager and install/build/start commands from
+that analysis — every field stays editable, and nothing is ever guessed
+silently (see "Application Setup Service" below).
+
 From the running TUI:
 - `a` register a new application · `enter` open the selected card's detail view
 - arrows / `tab` / `shift+tab` move the selection · `r` refresh the list
@@ -72,10 +78,27 @@ composes those generic steps and maps the resulting `Result` into a
 feature-specific draft type — the engine itself never needs to change to add
 a new wizard or a new step to an existing one.
 
+`TextStep`/`ChoiceStep` also support `WithPrefill(func() string)`: a value
+source re-evaluated on every focus but only applied while the field still
+holds whatever it last auto-filled — so a value the user actually edited is
+never overwritten, while an untouched field stays in sync if the upstream
+source changes (e.g. the user goes back and picks a different project path).
+The engine itself still doesn't know *why* a value is being suggested; that
+knowledge lives entirely in the composing wizard package.
+
 The wizard never persists anything itself. Whatever hosts it (today,
 `internal/tui`'s `RootModel`) converts its `Result` into a domain draft, then
 calls the relevant service (e.g. `ApplicationService.Register`), which
 validates, checks for conflicts, and persists through the repository layer.
+
+The create-application wizard's own flow: **path first**, then an
+`AnalysisStep` that calls `ApplicationSetupService.Inspect` (see below) and
+shows what it found, then Name/Type/Framework/Runtime/Package
+manager/Install/Build/Start — each pre-filled from that analysis via
+`WithPrefill` — then Port/Domain/Repository (never pre-filled) and a final
+summary. `AnalysisStep` caches by path, so going back and forth between
+steps without changing the path never re-runs inspection; changing the path
+and returning does.
 
 ### Dashboard
 
@@ -146,8 +169,8 @@ shape as the execution engine, applied to detection instead of running:
   picks the highest-confidence one without discarding the rest.
   `NewDefaultRegistry()` wires up all seven built-in detectors.
 
-Not integrated anywhere yet — the application-registration wizard is meant
-to use this to autocomplete its fields, but that wiring is a later iteration.
+Integrated via `services.ApplicationSetupService` (see below) — the wizard
+itself never imports this package directly.
 
 ### Deployment Planner
 
@@ -187,8 +210,22 @@ inferring a port from the `"start"` script's `--port`/`-p`/`PORT=` flag when
 present, noting a sibling Docker/Compose detection, and downgrading its own
 `Confidence` by one step whenever it had to raise a warning.
 
-Not integrated with the Wizard yet — that is the next iteration, once the
-Planner has been validated in isolation.
+Integrated via `services.ApplicationSetupService`, same as the Inspector —
+the wizard never imports `internal/planner` directly either.
+
+### Application Setup Service
+
+`services.ApplicationSetupService` is the orchestration layer the Wizard
+requirement asked for: the only thing standing between the create-application
+wizard and `internal/inspection`/`internal/planner`. `Inspect(ctx, path)`
+runs the Inspector, feeds its `Result` to the `DeploymentPlanner`, and
+projects the resulting `DeploymentPlan` into `ApplicationSetupProposal` — a
+type that lives in `internal/services` itself, built only from
+`models`/plain values, so `internal/tui` and its wizard packages never need
+to import inspection or planner types at all. The Wizard's `AnalysisStep`
+calls this service exactly once per distinct path and shows the user
+precisely what was detected, what was inferred, and what's left blank with
+a matching warning — never silent guessing.
 
 `internal/` is used deliberately: nothing here is meant to be imported by
 other Go modules, which keeps the project free to change its internals
