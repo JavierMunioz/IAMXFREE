@@ -55,6 +55,7 @@ reshaping existing code:
 | `internal/execution`                 | Technology-agnostic contract for installing/building/running an application.    |
 | `internal/inspection`                | Reads a directory and detects what kind of project lives there. Read-only.      |
 | `internal/planner`                   | Turns an inspection.Result into a proposed IAMXFREE configuration.              |
+| `internal/runtimehost`               | The only package allowed to touch os/exec — running commands, checking PATH.   |
 | `internal/managers`                  | Concrete resource managers: processes, Nginx, Apache, env files, etc.           |
 | `internal/services`                  | Business logic coordinating managers + repositories (e.g. ApplicationService).  |
 | `internal/models`                    | Domain entities (Application, ApplicationDraft, ...).                           |
@@ -146,6 +147,35 @@ manage it, returning that strategy's `Metadata` — never invoking any
 lifecycle method. `internal/cli/root.go` currently wires up an empty
 `Registry`, so this always reports `execution.ErrNoStrategyFound` until the
 first concrete strategy is registered in a later iteration.
+
+### Runtime Host
+
+`internal/runtimehost` is the only package allowed to talk to the operating
+system — no other package imports `os/exec` (verified with
+`grep -rl '"os/exec"' --include="*.go" . | grep -v internal/runtimehost`,
+which returns nothing outside it). Execution strategies will depend on it;
+it never depends on them.
+
+- **`Host`** — the interface: `LookPath` (is a tool on PATH — "not found" is
+  a normal result, not an error), `Version` (run a tool's version flag and
+  report it structurally), `Run`/`RunCaptured` (synchronous only — no
+  persistent processes yet), `WorkingDir`, `FileExists`/`DirExists`.
+- **`LinuxHost`** — the real implementation, backed by `os/exec` and `os`.
+  Used in production.
+- **`runtimehosttest.FakeHost`** — a builder-style test double
+  (`WithLookPath`/`WithVersion`/`WithRunResult`/...) in its own importable
+  subpackage (not `_test.go`), so any future package's tests — starting with
+  execution strategies — can depend on deterministic, configured responses
+  instead of whatever happens to be installed on the machine running them.
+
+Structured models instead of bare errors: `CommandResult` (exit code,
+captured stdout/stderr, duration), `ToolAvailability`/`ToolInfo` (found vs.
+not found is data, not a failure), and `ExecutionError` (implements `error`
+and `Unwrap`, carrying command/args/exit code/stderr so a caller can inspect
+a failure without re-parsing a message string).
+
+Not wired into anything yet — no Execution Strategy has been implemented
+against it. That is the next iteration.
 
 ### Project Inspector
 
