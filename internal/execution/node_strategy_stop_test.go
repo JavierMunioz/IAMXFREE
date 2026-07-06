@@ -31,3 +31,34 @@ func TestNodeStrategyStopPropagatesHostError(t *testing.T) {
 		t.Fatalf("Stop() error = %v, want %v", err, wantErr)
 	}
 }
+
+func TestNodeStrategyStatusStillRunning(t *testing.T) {
+	host := healthyFakeHost().WithRunningPID(4242, true)
+	strategy := execution.NewNodeStrategy(host)
+
+	session := execution.Session{PID: 4242, Command: "npm", Args: []string{"start"}}
+	updated, err := strategy.Status(context.Background(), healthyNodeApp(), session)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if updated.Status != execution.StatusRunning {
+		t.Errorf("Status = %q, want %q", updated.Status, execution.StatusRunning)
+	}
+	if updated.PID != 4242 || updated.Command != "npm" {
+		t.Errorf("expected the rest of the session to be preserved, got %+v", updated)
+	}
+}
+
+func TestNodeStrategyStatusNoLongerRunning(t *testing.T) {
+	host := healthyFakeHost().WithRunningPID(4242, false)
+	strategy := execution.NewNodeStrategy(host)
+
+	session := execution.Session{PID: 4242}
+	updated, err := strategy.Status(context.Background(), healthyNodeApp(), session)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if updated.Status != execution.StatusStopped {
+		t.Errorf("Status = %q, want %q", updated.Status, execution.StatusStopped)
+	}
+}
