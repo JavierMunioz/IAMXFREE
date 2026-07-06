@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories/jsonstore"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
@@ -12,11 +13,46 @@ import (
 
 func newService(t *testing.T) services.ApplicationService {
 	t.Helper()
+	return newServiceWithResolver(t, execution.NewResolver(execution.NewRegistry()))
+}
+
+func newServiceWithResolver(t *testing.T, resolver *execution.Resolver) services.ApplicationService {
+	t.Helper()
 	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewApplicationRepository() error = %v", err)
 	}
-	return services.NewApplicationService(repo)
+	return services.NewApplicationService(repo, resolver)
+}
+
+// fakeStrategy is a minimal execution.Strategy used only to test
+// ResolveExecutionStrategy's wiring; it never runs anything.
+type fakeStrategy struct {
+	name    string
+	runtime models.Runtime
+}
+
+func (s *fakeStrategy) Metadata() execution.Metadata {
+	return execution.Metadata{Name: s.name, SupportedRuntimes: []models.Runtime{s.runtime}}
+}
+func (s *fakeStrategy) CanHandle(app *models.Application) bool { return app.Runtime == s.runtime }
+func (s *fakeStrategy) Install(context.Context, *models.Application) error {
+	return execution.ErrNotImplemented
+}
+func (s *fakeStrategy) Build(context.Context, *models.Application) error {
+	return execution.ErrNotImplemented
+}
+func (s *fakeStrategy) Start(context.Context, *models.Application) error {
+	return execution.ErrNotImplemented
+}
+func (s *fakeStrategy) Stop(context.Context, *models.Application) error {
+	return execution.ErrNotImplemented
+}
+func (s *fakeStrategy) Restart(context.Context, *models.Application) error {
+	return execution.ErrNotImplemented
+}
+func (s *fakeStrategy) Update(context.Context, *models.Application) error {
+	return execution.ErrNotImplemented
 }
 
 func TestApplicationServiceRegister(t *testing.T) {
@@ -129,5 +165,49 @@ func TestApplicationServiceRemove(t *testing.T) {
 	}
 	if _, err := svc.Get(ctx, app.ID); err == nil {
 		t.Fatal("expected Get() to fail after Remove()")
+	}
+}
+
+func TestApplicationServiceResolveExecutionStrategyNoneRegistered(t *testing.T) {
+	ctx := context.Background()
+	svc := newService(t)
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	if err := svc.Register(ctx, app); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	if _, err := svc.ResolveExecutionStrategy(ctx, app.ID); !errors.Is(err, execution.ErrNoStrategyFound) {
+		t.Fatalf("ResolveExecutionStrategy() error = %v, want %v", err, execution.ErrNoStrategyFound)
+	}
+}
+
+func TestApplicationServiceResolveExecutionStrategyReturnsMetadata(t *testing.T) {
+	ctx := context.Background()
+	registry := execution.NewRegistry()
+	registry.Register(&fakeStrategy{name: "node-npm", runtime: models.RuntimeNode})
+	svc := newServiceWithResolver(t, execution.NewResolver(registry))
+
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	if err := svc.Register(ctx, app); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	meta, err := svc.ResolveExecutionStrategy(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("ResolveExecutionStrategy() error = %v", err)
+	}
+	if meta.Name != "node-npm" {
+		t.Fatalf("ResolveExecutionStrategy() name = %q, want %q", meta.Name, "node-npm")
+	}
+}
+
+func TestApplicationServiceResolveExecutionStrategyUnknownApplication(t *testing.T) {
+	ctx := context.Background()
+	svc := newService(t)
+
+	if _, err := svc.ResolveExecutionStrategy(ctx, "does-not-exist"); err == nil {
+		t.Fatal("expected an error for an unknown application")
 	}
 }

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 
+	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 )
 
@@ -18,4 +19,10 @@ type ApplicationService interface {
 	UpdateConfig(ctx context.Context, id string, config models.DeploymentConfig) (*models.Application, error)
 	ChangeStatus(ctx context.Context, id string, status models.ApplicationStatus) (*models.Application, error)
 	Remove(ctx context.Context, id string) error
+
+	// ResolveExecutionStrategy answers "which strategy will manage this
+	// application" without running anything: it returns the metadata of
+	// the execution.Strategy the resolver would pick, or an error if none
+	// is registered for the application's runtime/framework yet.
+	ResolveExecutionStrategy(ctx context.Context, id string) (execution.Metadata, error)
 }

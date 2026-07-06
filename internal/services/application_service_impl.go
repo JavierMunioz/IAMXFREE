@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories"
 )
@@ -14,14 +15,16 @@ import (
 var ErrApplicationNameTaken = errors.New("application name is already taken")
 
 type applicationService struct {
-	repo repositories.ApplicationRepository
+	repo     repositories.ApplicationRepository
+	resolver *execution.Resolver
 }
 
 // NewApplicationService builds the default ApplicationService, backed by
-// repo. Swapping repo's concrete implementation (JSON, SQLite, ...) never
-// requires changing this type.
-func NewApplicationService(repo repositories.ApplicationRepository) ApplicationService {
-	return &applicationService{repo: repo}
+// repo and resolver. Swapping repo's concrete implementation (JSON,
+// SQLite, ...) never requires changing this type, and neither does
+// registering a new execution.Strategy with resolver.
+func NewApplicationService(repo repositories.ApplicationRepository, resolver *execution.Resolver) ApplicationService {
+	return &applicationService{repo: repo, resolver: resolver}
 }
 
 func (s *applicationService) Register(ctx context.Context, app *models.Application) error {
@@ -82,4 +85,18 @@ func (s *applicationService) ChangeStatus(ctx context.Context, id string, status
 
 func (s *applicationService) Remove(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *applicationService) ResolveExecutionStrategy(ctx context.Context, id string) (execution.Metadata, error) {
+	app, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return execution.Metadata{}, err
+	}
+
+	strategy, err := s.resolver.Resolve(app)
+	if err != nil {
+		return execution.Metadata{}, err
+	}
+
+	return strategy.Metadata(), nil
 }

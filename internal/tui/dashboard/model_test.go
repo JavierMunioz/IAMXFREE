@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 )
 
@@ -30,6 +31,9 @@ func (f *fakeService) ChangeStatus(context.Context, string, models.ApplicationSt
 	return nil, nil
 }
 func (f *fakeService) Remove(context.Context, string) error { return nil }
+func (f *fakeService) ResolveExecutionStrategy(context.Context, string) (execution.Metadata, error) {
+	return execution.Metadata{}, execution.ErrNoStrategyFound
+}
 
 func newApp(name string, createdAt time.Time) *models.Application {
 	app := models.NewApplication(name, models.ApplicationTypeAPI)

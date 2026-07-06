@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
@@ -35,6 +36,9 @@ func (f *fakeApplicationService) ChangeStatus(context.Context, string, models.Ap
 }
 func (f *fakeApplicationService) Remove(context.Context, string) error {
 	return nil
+}
+func (f *fakeApplicationService) ResolveExecutionStrategy(context.Context, string) (execution.Metadata, error) {
+	return execution.Metadata{}, execution.ErrNoStrategyFound
 }
 
 func validResult() wizard.Result {
