@@ -41,8 +41,9 @@ type Metadata struct {
 }
 
 // Strategy describes how one kind of application is installed, built and
-// run. Each supported technology implements its own Strategy; none exist
-// yet — this package only defines the shape they will take.
+// run. Each supported technology implements its own Strategy — Node+npm is
+// the reference implementation (node_strategy.go) every future technology
+// follows the shape of.
 type Strategy interface {
 	// Metadata describes this strategy: its name, what it supports, and
 	// what it requires to be available on the VPS.
@@ -53,10 +54,27 @@ type Strategy interface {
 	// no I/O and starts no process.
 	CanHandle(app *models.Application) bool
 
+	// HealthCheck verifies the prerequisites this strategy needs to manage
+	// app — runtime/package manager installed, manifest present, path
+	// valid, and so on. It always returns a HealthCheck; a failed
+	// prerequisite is reported as a failed item, never as err.
+	HealthCheck(ctx context.Context, app *models.Application) (HealthCheck, error)
+
+	// Readiness interprets a HealthCheck into a go/no-go decision: whether
+	// app can be started right now, what's missing, and what only deserves
+	// a warning.
+	Readiness(ctx context.Context, app *models.Application) (Readiness, error)
+
 	Install(ctx context.Context, app *models.Application) error
 	Build(ctx context.Context, app *models.Application) error
-	Start(ctx context.Context, app *models.Application) error
-	Stop(ctx context.Context, app *models.Application) error
+
+	// Start runs app's configured start command and returns a Session
+	// describing the resulting process.
+	Start(ctx context.Context, app *models.Application) (Session, error)
+
+	// Stop terminates the process described by session.
+	Stop(ctx context.Context, app *models.Application, session Session) error
+
 	Restart(ctx context.Context, app *models.Application) error
 	Update(ctx context.Context, app *models.Application) error
 }
