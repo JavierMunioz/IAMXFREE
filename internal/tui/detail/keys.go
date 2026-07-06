@@ -30,6 +30,15 @@ func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
 	case "f5":
 		m = m.SetStatus("Refreshing…")
 		return m, m.refreshCmd()
+
+	case "r":
+		return m.SetStatus("Restart is not implemented yet."), nil
+
+	case "l":
+		return m.SetStatus("Logs are not implemented yet."), nil
+
+	case "e":
+		return m.SetStatus("Editing configuration is not implemented yet."), nil
 	}
 
 	return m, nil

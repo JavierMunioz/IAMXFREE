@@ -21,7 +21,18 @@ func (m Model) View() string {
 		sections = append(sections, status)
 	}
 
+	sections = append(sections, m.renderActionBar())
+
 	return strings.Join(sections, "\n\n")
+}
+
+// renderActionBar lists every keybinding this screen responds to. Actions
+// without real logic yet are still listed — pressing them reports "not
+// implemented yet" via the status line instead of doing nothing silently.
+func (m Model) renderActionBar() string {
+	return footerStyle.Render(
+		"s: start  ·  x: stop  ·  r: restart*  ·  l: logs*  ·  e: edit*  ·  f5: refresh  ·  b/esc: back  ·  q: quit    (* not implemented yet)",
+	)
 }
 
 func (m Model) renderStatusLine() string {
