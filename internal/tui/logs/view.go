@@ -14,13 +14,16 @@ func (m Model) View() string {
 
 	header := m.renderHeader()
 	body := strings.Join(m.renderVisibleLines(), "\n")
-	footer := footerStyle.Render("esc/b: back  ·  q: quit")
+	footer := footerStyle.Render("↑/↓: scroll  ·  pgup/pgdown: page  ·  home/end: start/end  ·  esc/b: back  ·  q: quit")
 
 	return strings.Join([]string{header, "", body, "", footer}, "\n")
 }
 
 func (m Model) renderHeader() string {
 	title := fmt.Sprintf("Logs — %d line(s) retained", m.buffer.len())
+	if !m.followLive {
+		title += " (scrolled — press end to follow live)"
+	}
 	if m.streamEnded {
 		title += " (stream ended)"
 	}
@@ -37,17 +40,19 @@ func (m Model) visibleHeight() int {
 	return h
 }
 
-// renderVisibleLines renders the lines currently in view, pinned to the
-// bottom (the most recent lines) — scrolling arrives in a later commit.
+// renderVisibleLines renders the lines currently in view: the newest
+// retained lines while followLive is true, or the window scrolled to
+// topIndex otherwise.
 func (m Model) renderVisibleLines() []string {
 	all := m.buffer.all()
 	h := m.visibleHeight()
 
-	start := len(all) - h
-	if start < 0 {
-		start = 0
+	top := m.currentTop(len(all))
+	end := top + h
+	if end > len(all) {
+		end = len(all)
 	}
-	visible := all[start:]
+	visible := all[top:end]
 
 	lines := make([]string, 0, len(visible))
 	for _, e := range visible {

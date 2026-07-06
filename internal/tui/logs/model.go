@@ -45,6 +45,13 @@ type Model struct {
 	streamEnded bool
 	openErr     error
 
+	// followLive, when true, always shows the newest retained lines —
+	// scrolling up disables it; scrolling back down to the bottom (or
+	// pressing "end") re-enables it. topIndex is only meaningful while
+	// followLive is false.
+	followLive bool
+	topIndex   int
+
 	width  int
 	height int
 }
@@ -62,6 +69,7 @@ func NewWithCapacity(executionService services.ExecutionService, appID string, s
 		appID:            appID,
 		session:          session,
 		buffer:           newRingBuffer(capacity),
+		followLive:       true,
 		width:            80,
 		height:           24,
 	}
