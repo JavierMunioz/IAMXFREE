@@ -10,6 +10,7 @@ import (
 
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
+	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizards/application"
@@ -41,6 +42,12 @@ func (f *fakeApplicationService) ResolveExecutionStrategy(context.Context, strin
 	return execution.Metadata{}, execution.ErrNoStrategyFound
 }
 
+type fakeApplicationSetupService struct{}
+
+func (fakeApplicationSetupService) Inspect(context.Context, string) (services.ApplicationSetupProposal, error) {
+	return services.ApplicationSetupProposal{}, nil
+}
+
 func validResult() wizard.Result {
 	return wizard.Result{Values: map[string]string{
 		application.KeyName:      "my-api",
@@ -53,7 +60,7 @@ func validResult() wizard.Result {
 }
 
 func TestRootModelPressingAOpensWizard(t *testing.T) {
-	m := NewRootModel(&fakeApplicationService{})
+	m := NewRootModel(&fakeApplicationService{}, fakeApplicationSetupService{})
 
 	// "a" is handled by the dashboard, which asks the root model to open
 	// the wizard via a command rather than switching screens itself.
@@ -76,7 +83,7 @@ func TestRootModelPressingAOpensWizard(t *testing.T) {
 }
 
 func TestRootModelQuits(t *testing.T) {
-	m := NewRootModel(&fakeApplicationService{})
+	m := NewRootModel(&fakeApplicationService{}, fakeApplicationSetupService{})
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if cmd == nil {
@@ -85,7 +92,7 @@ func TestRootModelQuits(t *testing.T) {
 }
 
 func TestRootModelCancelledWizardReturnsToDashboard(t *testing.T) {
-	m := NewRootModel(&fakeApplicationService{})
+	m := NewRootModel(&fakeApplicationService{}, fakeApplicationSetupService{})
 	m.screen = screenWizard
 
 	updated, _ := m.Update(wizard.CancelledMsg{})
@@ -100,7 +107,7 @@ func TestRootModelCancelledWizardReturnsToDashboard(t *testing.T) {
 }
 
 func TestRootModelCompletedWizardRegistersApplication(t *testing.T) {
-	m := NewRootModel(&fakeApplicationService{})
+	m := NewRootModel(&fakeApplicationService{}, fakeApplicationSetupService{})
 	m.screen = screenWizard
 
 	updated, cmd := m.Update(wizard.CompletedMsg{Result: validResult()})
@@ -131,7 +138,7 @@ func TestRootModelCompletedWizardRegistersApplication(t *testing.T) {
 
 func TestRootModelRegistrationFailureShowsError(t *testing.T) {
 	wantErr := errors.New("boom")
-	m := NewRootModel(&fakeApplicationService{registerErr: wantErr})
+	m := NewRootModel(&fakeApplicationService{registerErr: wantErr}, fakeApplicationSetupService{})
 	m.screen = screenWizard
 
 	updated, cmd := m.Update(wizard.CompletedMsg{Result: validResult()})

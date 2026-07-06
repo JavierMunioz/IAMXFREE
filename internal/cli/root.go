@@ -6,6 +6,8 @@ package cli
 import (
 	"github.com/JavierMunioz/IAMXFREE/internal/config"
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
+	"github.com/JavierMunioz/IAMXFREE/internal/inspection"
+	"github.com/JavierMunioz/IAMXFREE/internal/planner"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories/jsonstore"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui"
@@ -37,7 +39,12 @@ func NewRootCommand() *cobra.Command {
 			resolver := execution.NewResolver(execution.NewRegistry())
 
 			service := services.NewApplicationService(repo, resolver)
-			return tui.Run(service)
+
+			inspector := inspection.NewInspector(inspection.NewDefaultRegistry())
+			deploymentPlanner := planner.NewDeploymentPlanner(planner.NewDefaultRegistry())
+			setup := services.NewApplicationSetupService(inspector, deploymentPlanner)
+
+			return tui.Run(service, setup)
 		},
 	}
 

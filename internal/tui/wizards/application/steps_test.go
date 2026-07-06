@@ -7,14 +7,19 @@ import (
 )
 
 func TestStepsOrderAndKeys(t *testing.T) {
-	steps := application.Steps()
+	steps := application.Steps(&fakeSetupService{})
 
 	wantKeys := []string{
+		application.KeyPath,
+		application.KeyAnalysis,
 		application.KeyName,
 		application.KeyType,
 		application.KeyFramework,
 		application.KeyRuntime,
-		application.KeyPath,
+		application.KeyPackageManager,
+		application.KeyInstallCommand,
+		application.KeyBuildCommand,
+		application.KeyStartCommand,
 		application.KeyPort,
 		application.KeyDomain,
 		application.KeyRepoURL,

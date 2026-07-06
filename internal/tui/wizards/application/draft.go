@@ -18,13 +18,17 @@ func DraftFromResult(result wizard.Result) (models.ApplicationDraft, error) {
 	}
 
 	return models.ApplicationDraft{
-		Name:      result.Get(KeyName),
-		Type:      models.ApplicationType(result.Get(KeyType)),
-		Framework: models.Framework(result.Get(KeyFramework)),
-		Runtime:   models.Runtime(result.Get(KeyRuntime)),
-		Path:      result.Get(KeyPath),
-		Port:      port,
-		Domain:    result.Get(KeyDomain),
-		RepoURL:   result.Get(KeyRepoURL),
+		Name:           result.Get(KeyName),
+		Type:           models.ApplicationType(result.Get(KeyType)),
+		Framework:      models.Framework(result.Get(KeyFramework)),
+		Runtime:        models.Runtime(result.Get(KeyRuntime)),
+		Path:           result.Get(KeyPath),
+		Port:           port,
+		Domain:         result.Get(KeyDomain),
+		RepoURL:        result.Get(KeyRepoURL),
+		PackageManager: result.Get(KeyPackageManager),
+		InstallCommand: result.Get(KeyInstallCommand),
+		BuildCommand:   result.Get(KeyBuildCommand),
+		StartCommand:   result.Get(KeyStartCommand),
 	}, nil
 }

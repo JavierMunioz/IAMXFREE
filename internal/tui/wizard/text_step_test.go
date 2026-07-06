@@ -79,9 +79,9 @@ func TestTextStepPrefillNeverOverwritesUserEdit(t *testing.T) {
 		WithPrefill(func() string { return value })
 
 	step.Focus()
-	typeRunes(step, "-custom")   // user edits the prefilled value
-	value = "a-different-name"   // upstream data changes (e.g. re-inspection)
-	step.Focus()                 // step is revisited
+	typeRunes(step, "-custom") // user edits the prefilled value
+	value = "a-different-name" // upstream data changes (e.g. re-inspection)
+	step.Focus()               // step is revisited
 
 	if got := step.Value(); got != "my-api-custom" {
 		t.Fatalf("Value() = %q, want %q (user edit preserved)", got, "my-api-custom")

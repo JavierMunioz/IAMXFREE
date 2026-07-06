@@ -133,10 +133,10 @@ func TestChoiceStepPrefillNeverOverwritesUserSelection(t *testing.T) {
 	step := wizard.NewChoiceStep("Type", "Application type:", newTestChoices(), false).
 		WithPrefill(func() string { return value })
 
-	step.Focus()                                    // selects backend
-	step.Update(tea.KeyMsg{Type: tea.KeyUp})         // user picks frontend instead
-	value = "backend"                                // upstream unchanged, still "backend"
-	step.Focus()                                     // revisited
+	step.Focus()                             // selects backend
+	step.Update(tea.KeyMsg{Type: tea.KeyUp}) // user picks frontend instead
+	value = "backend"                        // upstream unchanged, still "backend"
+	step.Focus()                             // revisited
 
 	if got := step.Value(); got != "frontend" {
 		t.Fatalf("Value() = %q, want %q (user selection preserved)", got, "frontend")

@@ -38,9 +38,11 @@ type applicationRegistrationFailedMsg struct {
 
 // RootModel is the top-level Bubble Tea model. It owns which screen is
 // active — the dashboard or the create-application wizard — and delegates
-// the actual persistence decision to services.ApplicationService.
+// the actual persistence decision to services.ApplicationService and the
+// project-analysis decision to services.ApplicationSetupService.
 type RootModel struct {
 	service services.ApplicationService
+	setup   services.ApplicationSetupService
 
 	screen    screen
 	dashboard dashboard.Model
@@ -48,9 +50,10 @@ type RootModel struct {
 }
 
 // NewRootModel builds the initial application model.
-func NewRootModel(service services.ApplicationService) RootModel {
+func NewRootModel(service services.ApplicationService, setup services.ApplicationSetupService) RootModel {
 	return RootModel{
 		service:   service,
+		setup:     setup,
 		screen:    screenDashboard,
 		dashboard: dashboard.New(service),
 	}
@@ -79,7 +82,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dashboard.OpenWizardMsg:
 		m.screen = screenWizard
-		m.wizard = wizard.New("New application", application.Steps())
+		m.wizard = wizard.New("New application", application.Steps(m.setup))
 		return m, m.wizard.Init()
 
 	case applicationRegisteredMsg:
@@ -125,8 +128,8 @@ func (m RootModel) View() string {
 }
 
 // Run starts the Bubble Tea program using the terminal's real stdin/stdout.
-func Run(service services.ApplicationService) error {
-	program := tea.NewProgram(NewRootModel(service), tea.WithAltScreen())
+func Run(service services.ApplicationService, setup services.ApplicationSetupService) error {
+	program := tea.NewProgram(NewRootModel(service, setup), tea.WithAltScreen())
 	_, err := program.Run()
 	return err
 }
