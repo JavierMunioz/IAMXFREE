@@ -156,11 +156,11 @@ func (m Model) renderStatusLine() string {
 	}
 }
 
-// renderBody is filled in incrementally as the dashboard's screens (empty
-// state, detail view, footer) are built.
+// renderBody is filled in incrementally as the dashboard's remaining screens
+// (detail view, footer) are built.
 func (m Model) renderBody() string {
 	if len(m.apps) == 0 {
-		return mutedStyle.Render("(coming soon)")
+		return m.renderEmptyState()
 	}
 	return m.renderGrid()
 }
