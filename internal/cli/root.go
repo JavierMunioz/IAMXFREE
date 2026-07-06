@@ -9,6 +9,7 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/inspection"
 	"github.com/JavierMunioz/IAMXFREE/internal/planner"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories/jsonstore"
+	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui"
 	"github.com/spf13/cobra"
@@ -32,11 +33,11 @@ func NewRootCommand() *cobra.Command {
 				return err
 			}
 
-			// No execution.Strategy is registered yet — that arrives with
-			// the first concrete strategy (Node+npm, Docker, ...) in a
-			// later iteration. Until then, ResolveExecutionStrategy always
-			// reports execution.ErrNoStrategyFound.
-			resolver := execution.NewResolver(execution.NewRegistry())
+			host := runtimehost.NewLinuxHost()
+
+			executionRegistry := execution.NewRegistry()
+			executionRegistry.Register(execution.NewNodeStrategy(host))
+			resolver := execution.NewResolver(executionRegistry)
 
 			service := services.NewApplicationService(repo, resolver)
 
