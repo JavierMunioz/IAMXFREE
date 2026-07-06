@@ -100,3 +100,25 @@ func (s *applicationService) ResolveExecutionStrategy(ctx context.Context, id st
 
 	return strategy.Metadata(), nil
 }
+
+func (s *applicationService) CheckExecutionHealth(ctx context.Context, id string) (ExecutionHealth, error) {
+	app, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return ExecutionHealth{}, err
+	}
+
+	strategy, err := s.resolver.Resolve(app)
+	if err != nil {
+		return ExecutionHealth{}, err
+	}
+
+	health, err := strategy.HealthCheck(ctx, app)
+	if err != nil {
+		return ExecutionHealth{}, err
+	}
+
+	return ExecutionHealth{
+		StrategyName: strategy.Metadata().Name,
+		Healthy:      health.Healthy(),
+	}, nil
+}

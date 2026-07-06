@@ -26,10 +26,13 @@ func newServiceWithResolver(t *testing.T, resolver *execution.Resolver) services
 }
 
 // fakeStrategy is a minimal execution.Strategy used only to test
-// ResolveExecutionStrategy's wiring; it never runs anything.
+// ResolveExecutionStrategy/CheckExecutionHealth's wiring; it never runs
+// anything.
 type fakeStrategy struct {
-	name    string
-	runtime models.Runtime
+	name      string
+	runtime   models.Runtime
+	health    execution.HealthCheck
+	healthErr error
 }
 
 func (s *fakeStrategy) Metadata() execution.Metadata {
@@ -37,7 +40,7 @@ func (s *fakeStrategy) Metadata() execution.Metadata {
 }
 func (s *fakeStrategy) CanHandle(app *models.Application) bool { return app.Runtime == s.runtime }
 func (s *fakeStrategy) HealthCheck(context.Context, *models.Application) (execution.HealthCheck, error) {
-	return execution.HealthCheck{}, execution.ErrNotImplemented
+	return s.health, s.healthErr
 }
 func (s *fakeStrategy) Readiness(context.Context, *models.Application) (execution.Readiness, error) {
 	return execution.Readiness{}, execution.ErrNotImplemented
@@ -215,5 +218,77 @@ func TestApplicationServiceResolveExecutionStrategyUnknownApplication(t *testing
 
 	if _, err := svc.ResolveExecutionStrategy(ctx, "does-not-exist"); err == nil {
 		t.Fatal("expected an error for an unknown application")
+	}
+}
+
+func TestApplicationServiceCheckExecutionHealthHealthy(t *testing.T) {
+	ctx := context.Background()
+	registry := execution.NewRegistry()
+	registry.Register(&fakeStrategy{
+		name:    "node-npm",
+		runtime: models.RuntimeNode,
+		health: execution.HealthCheck{Items: []execution.HealthCheckItem{
+			{Name: execution.HealthCheckRuntimeInstalled, Status: execution.HealthStatusPass},
+		}},
+	})
+	svc := newServiceWithResolver(t, execution.NewResolver(registry))
+
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	if err := svc.Register(ctx, app); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	health, err := svc.CheckExecutionHealth(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("CheckExecutionHealth() error = %v", err)
+	}
+	if health.StrategyName != "node-npm" {
+		t.Errorf("StrategyName = %q, want %q", health.StrategyName, "node-npm")
+	}
+	if !health.Healthy {
+		t.Error("expected Healthy to be true")
+	}
+}
+
+func TestApplicationServiceCheckExecutionHealthUnhealthy(t *testing.T) {
+	ctx := context.Background()
+	registry := execution.NewRegistry()
+	registry.Register(&fakeStrategy{
+		name:    "node-npm",
+		runtime: models.RuntimeNode,
+		health: execution.HealthCheck{Items: []execution.HealthCheckItem{
+			{Name: execution.HealthCheckRuntimeInstalled, Status: execution.HealthStatusFail, Detail: "node not found"},
+		}},
+	})
+	svc := newServiceWithResolver(t, execution.NewResolver(registry))
+
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	if err := svc.Register(ctx, app); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	health, err := svc.CheckExecutionHealth(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("CheckExecutionHealth() error = %v", err)
+	}
+	if health.Healthy {
+		t.Error("expected Healthy to be false")
+	}
+}
+
+func TestApplicationServiceCheckExecutionHealthNoStrategy(t *testing.T) {
+	ctx := context.Background()
+	svc := newService(t)
+
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	if err := svc.Register(ctx, app); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	if _, err := svc.CheckExecutionHealth(ctx, app.ID); !errors.Is(err, execution.ErrNoStrategyFound) {
+		t.Fatalf("CheckExecutionHealth() error = %v, want %v", err, execution.ErrNoStrategyFound)
 	}
 }

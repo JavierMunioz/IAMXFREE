@@ -41,6 +41,9 @@ func (f *fakeApplicationService) Remove(context.Context, string) error {
 func (f *fakeApplicationService) ResolveExecutionStrategy(context.Context, string) (execution.Metadata, error) {
 	return execution.Metadata{}, execution.ErrNoStrategyFound
 }
+func (f *fakeApplicationService) CheckExecutionHealth(context.Context, string) (services.ExecutionHealth, error) {
+	return services.ExecutionHealth{}, execution.ErrNoStrategyFound
+}
 
 type fakeApplicationSetupService struct{}
 

@@ -25,4 +25,17 @@ type ApplicationService interface {
 	// the execution.Strategy the resolver would pick, or an error if none
 	// is registered for the application's runtime/framework yet.
 	ResolveExecutionStrategy(ctx context.Context, id string) (execution.Metadata, error)
+
+	// CheckExecutionHealth resolves the application's execution strategy
+	// (if any) and runs its HealthCheck, summarizing the result for
+	// display (e.g. on a dashboard card) without exposing execution types
+	// to callers.
+	CheckExecutionHealth(ctx context.Context, id string) (ExecutionHealth, error)
+}
+
+// ExecutionHealth summarizes how an application would be managed and
+// whether its prerequisites are currently satisfied.
+type ExecutionHealth struct {
+	StrategyName string
+	Healthy      bool
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
+	"github.com/JavierMunioz/IAMXFREE/internal/services"
 )
 
 type fakeService struct {
@@ -33,6 +34,9 @@ func (f *fakeService) ChangeStatus(context.Context, string, models.ApplicationSt
 func (f *fakeService) Remove(context.Context, string) error { return nil }
 func (f *fakeService) ResolveExecutionStrategy(context.Context, string) (execution.Metadata, error) {
 	return execution.Metadata{}, execution.ErrNoStrategyFound
+}
+func (f *fakeService) CheckExecutionHealth(context.Context, string) (services.ExecutionHealth, error) {
+	return services.ExecutionHealth{}, execution.ErrNoStrategyFound
 }
 
 func newApp(name string, createdAt time.Time) *models.Application {
