@@ -7,12 +7,13 @@ component.
 
 ## Status
 
-The main dashboard and the application-registration wizard are implemented.
-Node.js applications managed with npm can now actually be started and
-stopped by IAMXFREE itself (see "Execution engine" below) — every other
-technology (Python, Go, PHP, Docker, systemd, PM2, ...) still has no
-Execution Strategy yet, so their applications' status shown on the
-dashboard still just reflects the stored record, not a live process.
+The main dashboard, the application-registration wizard, and a full
+application detail/administration screen are implemented. Node.js
+applications managed with npm can now actually be started and stopped by
+IAMXFREE itself from that detail screen (see "Execution engine" below) —
+every other technology (Python, Go, PHP, Docker, systemd, PM2, ...) still
+has no Execution Strategy yet, so their applications show no live
+Strategy/Health/session data, only what's stored.
 
 Registering an application analyzes the project path first: the wizard asks
 for a path, inspects it, shows what it found, and pre-fills name, type,
@@ -20,10 +21,14 @@ framework, runtime, package manager and install/build/start commands from
 that analysis — every field stays editable, and nothing is ever guessed
 silently (see "Application Setup Service" below).
 
-From the running TUI:
-- `a` register a new application · `enter` open the selected card's detail view
-- arrows / `tab` / `shift+tab` move the selection · `r` refresh the list
-- `e` / `d` are reserved for edit/delete (not implemented yet) · `q` quit
+From the dashboard:
+- `a` register a new application · `enter` open the selected card's detail screen
+- arrows / `tab` / `shift+tab` move the selection · `r` refresh the list · `q` quit
+
+From an application's detail screen (see "Application Detail Screen" below):
+- `s` start · `x` stop · `f5` refresh health/session
+- `r` restart · `l` logs · `e` edit config (all three: not implemented yet)
+- `b` / `esc` back to the dashboard · `q` quit
 
 ## Stack
 
@@ -49,7 +54,8 @@ reshaping existing code:
 | `cmd/iamxfree`                       | Entrypoint binary. Stays thin; delegates to `internal/cli`.                      |
 | `internal/cli`                       | Command/flag parsing (Cobra). Wires repositories/services and starts the TUI.    |
 | `internal/tui`                       | Presentation layer (Bubble Tea/Lipgloss). Renders state, emits intents.          |
-| `internal/tui/dashboard`             | The main screen: card grid of registered applications, top bar, detail view.    |
+| `internal/tui/dashboard`             | The main screen: card grid of registered applications, top bar — the entry point. |
+| `internal/tui/detail`                | Per-application administration screen: diagnose, start, stop, refresh.          |
 | `internal/tui/wizard`                | Generic, feature-agnostic multi-step form engine used by every TUI wizard.       |
 | `internal/tui/wizards/application`   | Composes the wizard engine into the concrete "create application" flow.         |
 | `internal/validation`                | Reusable, composable input validators (Required, Port, Domain, URL, ...).        |
@@ -119,10 +125,12 @@ terminals with no color support. Status colors follow the project's
 data-viz palette convention — a small fixed scale (good/warning/critical)
 that always pairs a color with an icon and a label, never color alone.
 Zero registered applications shows a friendly empty state instead of a blank
-grid. Pressing Enter opens a read-only detail view of the selected
-application; `e` (edit) and `d` (delete) are wired up but just report "not
-implemented yet" for now — the keys exist so the experience is already
-defined, even before the behavior behind them is.
+grid. The dashboard itself now holds no per-application actions at all —
+pressing Enter emits `OpenDetailMsg{AppID}` and whatever hosts it (today,
+`internal/tui`'s `RootModel`) decides what that means; the dashboard has no
+notion of "detail view" beyond that message, the same pattern `a` already
+used for `OpenWizardMsg`. This is deliberate: the dashboard is a list and an
+entry point, nothing else.
 
 When an application resolves to a registered `execution.Strategy` (Node+npm
 today), its card grows two extra lines — `Strategy: <name>` and a
@@ -130,6 +138,49 @@ today), its card grows two extra lines — `Strategy: <name>` and a
 run-status icon — fetched once per `Reload()` via
 `ApplicationService.CheckExecutionHealth` and simply omitted for
 applications with no resolvable strategy yet.
+
+### Application Detail Screen
+
+`internal/tui/detail` is where a single registered application is actually
+administered — diagnosed, started, and stopped. It is its own top-level
+screen (a sibling of the dashboard and the wizard, not a mode nested inside
+either), opened from the dashboard's `OpenDetailMsg` and returned from via
+its own `BackMsg`. Like every other screen, it depends only on
+`services.ApplicationService` and the new `services.ExecutionService` —
+never on `internal/execution`, `internal/runtimehost`, or a repository
+directly (verified with
+`grep -rn "internal/execution\|internal/runtimehost\|internal/repositories" internal/tui/detail/*.go`,
+which matches nothing outside a doc comment).
+
+Four panels:
+- **Top** — general info: name, type, framework, runtime, resolved
+  `Strategy`, the application's stored `Status`, live `Health`, port, domain.
+- **Left ("Technical")** — where it lives and how it's built: path,
+  repository, package manager, install/build/start commands, registration
+  date.
+- **Right ("Execution")** — the live session IAMXFREE is tracking, if any:
+  running/stopped, PID, start time, working directory, runtime. When
+  nothing has been started yet (or IAMXFREE was restarted, losing its
+  in-memory tracking — see "Runtime Host"), this says so explicitly rather
+  than showing blank fields.
+- **Bottom** — the action bar, listing every keybinding the screen responds
+  to, including the ones that don't do anything real yet (marked with `*`):
+  `s` start, `x` stop, `r`\* restart, `l`\* logs, `e`\* edit config, `f5`
+  refresh, `b`/`esc` back, `q` quit. No dead keys — every one of them
+  produces a visible status message.
+
+The session isn't persisted anywhere: pressing `s` calls
+`ExecutionService.Start`, and the resulting `services.RunSession` (a plain
+projection of `execution.Session` — PID, start time, command, args, working
+dir, status, runtime) is held only in the screen's own in-memory state for
+as long as it stays open. Pressing `x` calls `ExecutionService.Stop` and
+clears it. `s` refuses to start a second session over a tracked one (it
+would silently leak the first process's PID); `x` refuses when nothing is
+tracked. `f5` is the *only* refresh — there is no automatic/periodic
+polling yet — and it re-runs both the health check and, if a session is
+tracked, `ExecutionService.RefreshSession` (backed by the new
+`Strategy.Status` method, see "Execution engine") to notice if the process
+died on its own since the screen last checked.
 
 ### Runtime Host
 
@@ -173,7 +224,9 @@ started, stopped, restarted and updated. Three pieces:
 - **`Strategy`** — the contract one technology (Node+npm, Python+uv, Docker
   Compose, systemd, ...) implements: `CanHandle(app)` (pure, no I/O),
   `Metadata()`, `HealthCheck`/`Readiness` (diagnostics), `Start`/`Stop`
-  (session-aware execution), and `Install`/`Build`/`Restart`/`Update`
+  (session-aware execution), `Status` (re-checks whether a previously
+  returned `Session` is still alive — a point-in-time query, never
+  mutating or persisting anything), and `Install`/`Build`/`Restart`/`Update`
   (still `execution.ErrNotImplemented` for every strategy, Node included —
   out of scope so far).
 - **`Registry`** — where strategies register themselves (`Register(strategy)`).
@@ -208,19 +261,32 @@ and a start command is configured. `Start` calls `Readiness` first and
 refuses if it isn't ready, splits the configured start command on whitespace
 (not a full shell parser — quoted arguments with embedded spaces aren't
 supported yet) and runs it via `Host.StartProcess`, returning a `Session`.
-`Stop` calls `Host.StopProcess(session.PID)`. `CanHandle` matches only
+`Stop` calls `Host.StopProcess(session.PID)`. `Status` calls
+`Host.IsProcessRunning(session.PID)` and returns the same `Session` with
+just its `Status` field refreshed. `CanHandle` matches only
 `Runtime == node && Config.PackageManager == "npm"` — a Node app with no
 package manager configured, or a different one (pnpm, yarn, bun), is left
 for another `Strategy` to claim later, never assumed to be npm.
 
-`ApplicationService.ResolveExecutionStrategy` resolves an application's
-strategy and returns its `Metadata` without invoking anything.
-`ApplicationService.CheckExecutionHealth` goes one step further — resolves
-the strategy and actually runs its `HealthCheck` — summarized into
-`services.ExecutionHealth{StrategyName, Healthy}` so the dashboard (or
-anything else in `internal/tui`) never needs to import `internal/execution`
-types directly. `internal/cli/root.go` registers `execution.NewNodeStrategy`
-(backed by `runtimehost.NewLinuxHost()`) into the registry at startup.
+Two services sit between all of this and `internal/tui`, split by concern
+rather than crammed into one:
+
+- **`ApplicationService`** — CRUD on the `Application` entity, plus
+  `ResolveExecutionStrategy` (returns a strategy's `Metadata` without
+  invoking anything) and `CheckExecutionHealth` (actually runs
+  `HealthCheck`, summarized into `services.ExecutionHealth{StrategyName,
+  Healthy}`).
+- **`ExecutionService`** (new) — controlling a running application:
+  `Start`/`Stop`/`RefreshSession`, all working in terms of
+  `services.RunSession` (a plain projection of `execution.Session`) so
+  callers never need to import `internal/execution` to hold onto one
+  between calls. Both services resolve the same application's `Strategy`
+  independently through their own `*execution.Resolver`, since neither
+  depends on the other.
+
+`internal/cli/root.go` registers `execution.NewNodeStrategy` (backed by
+`runtimehost.NewLinuxHost()`) into the registry at startup, and constructs
+both `ApplicationService` and `ExecutionService` from the same resolver.
 
 ### Project Inspector
 
