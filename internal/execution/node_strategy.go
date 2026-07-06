@@ -51,17 +51,7 @@ func (s *nodeStrategy) Readiness(ctx context.Context, app *models.Application) (
 	return DeriveReadiness(health), nil
 }
 
-// Start and Stop are filled in incrementally by later commits; for now they
-// report not implemented like every other still-unimplemented lifecycle
-// method.
-
-func (s *nodeStrategy) Start(context.Context, *models.Application) (Session, error) {
-	return Session{}, ErrNotImplemented
-}
-
-func (s *nodeStrategy) Stop(context.Context, *models.Application, Session) error {
-	return ErrNotImplemented
-}
+// Start and Stop are implemented in node_strategy_run.go.
 
 func (s *nodeStrategy) Install(context.Context, *models.Application) error {
 	return ErrNotImplemented
