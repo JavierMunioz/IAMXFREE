@@ -7,10 +7,12 @@ component.
 
 ## Status
 
-The main dashboard and the application-registration wizard are implemented;
-infrastructure managers (Nginx, Apache, process supervision, systemd, Docker,
-etc.) do not exist yet — application status shown today comes from the
-stored record, not a live process.
+The main dashboard and the application-registration wizard are implemented.
+Node.js applications managed with npm can now actually be started and
+stopped by IAMXFREE itself (see "Execution engine" below) — every other
+technology (Python, Go, PHP, Docker, systemd, PM2, ...) still has no
+Execution Strategy yet, so their applications' status shown on the
+dashboard still just reflects the stored record, not a live process.
 
 Registering an application analyzes the project path first: the wizard asks
 for a path, inspects it, shows what it found, and pre-fills name, type,
@@ -122,51 +124,40 @@ application; `e` (edit) and `d` (delete) are wired up but just report "not
 implemented yet" for now — the keys exist so the experience is already
 defined, even before the behavior behind them is.
 
-### Execution engine
-
-`internal/execution` defines *how* an application would be installed, built,
-started, stopped, restarted and updated — without committing to any
-technology or running anything. Three pieces:
-
-- **`Strategy`** — the contract one technology (Node+npm, Python+uv, Docker
-  Compose, systemd, ...) implements: `CanHandle(app)` (a pure yes/no,
-  no I/O), `Metadata()` (name, supported runtimes/frameworks, requirements,
-  `Capabilities`), and the six lifecycle methods. No concrete strategy exists
-  yet — every lifecycle method a future strategy adds should return
-  `execution.ErrNotImplemented` until it has real logic.
-- **`Registry`** — where strategies register themselves (`Register(strategy)`).
-  Adding a new technology never means editing existing code, only
-  constructing its `Strategy` and registering it.
-- **`Resolver`** — given an `Application`, asks each registered strategy (in
-  registration order) whether it can handle it, and returns the first match.
-  No if/else chain to extend as technologies are added.
-
-`ApplicationService.ResolveExecutionStrategy` is the only integration point
-today: it looks up an application and asks the resolver which strategy would
-manage it, returning that strategy's `Metadata` — never invoking any
-lifecycle method. `internal/cli/root.go` currently wires up an empty
-`Registry`, so this always reports `execution.ErrNoStrategyFound` until the
-first concrete strategy is registered in a later iteration.
+When an application resolves to a registered `execution.Strategy` (Node+npm
+today), its card grows two extra lines — `Strategy: <name>` and a
+`Health:`/icon line using the same reserved status-color convention as the
+run-status icon — fetched once per `Reload()` via
+`ApplicationService.CheckExecutionHealth` and simply omitted for
+applications with no resolvable strategy yet.
 
 ### Runtime Host
 
 `internal/runtimehost` is the only package allowed to talk to the operating
 system — no other package imports `os/exec` (verified with
 `grep -rl '"os/exec"' --include="*.go" . | grep -v internal/runtimehost`,
-which returns nothing outside it). Execution strategies will depend on it;
-it never depends on them.
+which returns nothing outside it). Execution strategies depend on it; it
+never depends on them.
 
 - **`Host`** — the interface: `LookPath` (is a tool on PATH — "not found" is
   a normal result, not an error), `Version` (run a tool's version flag and
-  report it structurally), `Run`/`RunCaptured` (synchronous only — no
-  persistent processes yet), `WorkingDir`, `FileExists`/`DirExists`.
+  report it structurally), `Run`/`RunCaptured` (synchronous), `ReadFile`,
+  `WorkingDir`, `FileExists`/`DirExists`, and `StartProcess`/
+  `IsProcessRunning`/`StopProcess` for a long-running background process
+  (no supervision/auto-restart yet — that's a later iteration).
 - **`LinuxHost`** — the real implementation, backed by `os/exec` and `os`.
-  Used in production.
+  `StartProcess` tracks the resulting `*os.Process` and reaps it in a
+  background goroutine once it exits, so a long-running child (a web
+  server, say) never becomes a zombie even though nothing calls `Wait()`
+  explicitly; `IsProcessRunning`/`StopProcess` fall back to a raw
+  PID-based OS check when a PID isn't one this Host instance started
+  itself.
 - **`runtimehosttest.FakeHost`** — a builder-style test double
-  (`WithLookPath`/`WithVersion`/`WithRunResult`/...) in its own importable
-  subpackage (not `_test.go`), so any future package's tests — starting with
-  execution strategies — can depend on deterministic, configured responses
-  instead of whatever happens to be installed on the machine running them.
+  (`WithLookPath`/`WithVersion`/`WithRunResult`/`WithReadFile`/
+  `WithStartProcess`/`WithRunningPID`/`WithStopError`/...) in its own
+  importable subpackage (not `_test.go`), so execution strategies' tests
+  depend on deterministic, configured responses instead of whatever happens
+  to be installed on the machine running them.
 
 Structured models instead of bare errors: `CommandResult` (exit code,
 captured stdout/stderr, duration), `ToolAvailability`/`ToolInfo` (found vs.
@@ -174,8 +165,62 @@ not found is data, not a failure), and `ExecutionError` (implements `error`
 and `Unwrap`, carrying command/args/exit code/stderr so a caller can inspect
 a failure without re-parsing a message string).
 
-Not wired into anything yet — no Execution Strategy has been implemented
-against it. That is the next iteration.
+### Execution engine
+
+`internal/execution` defines *how* an application is installed, built,
+started, stopped, restarted and updated. Three pieces:
+
+- **`Strategy`** — the contract one technology (Node+npm, Python+uv, Docker
+  Compose, systemd, ...) implements: `CanHandle(app)` (pure, no I/O),
+  `Metadata()`, `HealthCheck`/`Readiness` (diagnostics), `Start`/`Stop`
+  (session-aware execution), and `Install`/`Build`/`Restart`/`Update`
+  (still `execution.ErrNotImplemented` for every strategy, Node included —
+  out of scope so far).
+- **`Registry`** — where strategies register themselves (`Register(strategy)`).
+  Adding a new technology never means editing existing code, only
+  constructing its `Strategy` and registering it.
+- **`Resolver`** — given an `Application`, asks each registered strategy (in
+  registration order) whether it can handle it, and returns the first match.
+  No if/else chain to extend as technologies are added.
+
+Shared models every `Strategy` uses the same way (not per-technology
+concepts): `Status` (`starting`/`running`/`stopping`/`stopped`/`failed`,
+room to grow), `Session` (never just a PID — start time, command, args,
+working dir, status, runtime), `HealthCheck`/`HealthCheckItem` (a fixed,
+technology-agnostic vocabulary of check names —
+`runtime_installed`/`package_manager_installed`/`manifest_exists`/
+`path_valid`/`scripts_available`/`commands_configured`/
+`directory_accessible` — each a structured pass/fail, never free text; what
+a name means in practice is technology-specific and goes in `Detail`), and
+`Readiness` (`DeriveReadiness(health)` is a single shared policy: a failed
+dependency check becomes a `MissingDependencies` entry, `scripts_available`
+failing is downgraded to a `Warnings` entry since it isn't always fatal,
+and anything else failed is a `BlockingErrors` entry — every one of those
+except warnings flips `Ready` to false).
+
+**Node.js (npm) is the reference `Strategy` implementation** — every future
+technology follows its shape. `HealthCheck` verifies node/npm are on PATH,
+the configured path is set and exists, `package.json` exists and declares at
+least one script (read via `Host.ReadFile` + a minimal local JSON struct —
+strategies never import `internal/inspection`, so this doesn't reuse the
+detector's parsing code; detection and execution stay decoupled on purpose),
+and a start command is configured. `Start` calls `Readiness` first and
+refuses if it isn't ready, splits the configured start command on whitespace
+(not a full shell parser — quoted arguments with embedded spaces aren't
+supported yet) and runs it via `Host.StartProcess`, returning a `Session`.
+`Stop` calls `Host.StopProcess(session.PID)`. `CanHandle` matches only
+`Runtime == node && Config.PackageManager == "npm"` — a Node app with no
+package manager configured, or a different one (pnpm, yarn, bun), is left
+for another `Strategy` to claim later, never assumed to be npm.
+
+`ApplicationService.ResolveExecutionStrategy` resolves an application's
+strategy and returns its `Metadata` without invoking anything.
+`ApplicationService.CheckExecutionHealth` goes one step further — resolves
+the strategy and actually runs its `HealthCheck` — summarized into
+`services.ExecutionHealth{StrategyName, Healthy}` so the dashboard (or
+anything else in `internal/tui`) never needs to import `internal/execution`
+types directly. `internal/cli/root.go` registers `execution.NewNodeStrategy`
+(backed by `runtimehost.NewLinuxHost()`) into the registry at startup.
 
 ### Project Inspector
 
