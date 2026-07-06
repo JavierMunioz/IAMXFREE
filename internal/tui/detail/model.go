@@ -150,6 +150,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.strategyName = ""
 		return m, nil
 
+	case startedMsg:
+		m.session = msg.session
+		m.hasSession = true
+		m = m.SetStatus("Application started.")
+		return m, nil
+
+	case startFailedMsg:
+		m = m.SetError(msg.err)
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}

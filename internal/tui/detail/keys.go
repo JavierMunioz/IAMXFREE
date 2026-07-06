@@ -12,6 +12,13 @@ func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
 
 	case "esc", "b":
 		return m, func() tea.Msg { return BackMsg{} }
+
+	case "s":
+		if m.hasSession {
+			return m.SetStatus("Already tracking a session — stop it first."), nil
+		}
+		m = m.SetStatus("Starting…")
+		return m, m.startCmd()
 	}
 
 	return m, nil
