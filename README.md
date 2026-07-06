@@ -8,12 +8,13 @@ component.
 ## Status
 
 The main dashboard, the application-registration wizard, and a full
-application detail/administration screen are implemented. Node.js
-applications managed with npm can now actually be started and stopped by
-IAMXFREE itself from that detail screen (see "Execution engine" below) —
-every other technology (Python, Go, PHP, Docker, systemd, PM2, ...) still
-has no Execution Strategy yet, so their applications show no live
-Strategy/Health/session data, only what's stored.
+application detail/administration screen — including a real-time log
+viewer — are implemented. Node.js applications managed with npm can now
+actually be started, stopped, and watched (its own captured stdout/stderr,
+live) by IAMXFREE itself (see "Execution engine" and "Real-time Logs"
+below) — every other technology (Python, Go, PHP, Docker, systemd, PM2,
+...) still has no Execution Strategy yet, so their applications show no
+live Strategy/Health/session/log data, only what's stored.
 
 Registering an application analyzes the project path first: the wizard asks
 for a path, inspects it, shows what it found, and pre-fills name, type,
@@ -26,9 +27,15 @@ From the dashboard:
 - arrows / `tab` / `shift+tab` move the selection · `r` refresh the list · `q` quit
 
 From an application's detail screen (see "Application Detail Screen" below):
-- `s` start · `x` stop · `f5` refresh health/session
-- `r` restart · `l` logs · `e` edit config (all three: not implemented yet)
+- `s` start · `x` stop · `l` open real-time logs (requires an active session)
+- `f5` refresh health/session · `r` restart · `e` edit config (both: not implemented yet)
 - `b` / `esc` back to the dashboard · `q` quit
+
+From the logs screen (see "Real-time Logs" below):
+- `↑`/`↓` (or `k`/`j`) scroll by line · `pgup`/`pgdown` scroll by page
+- `home` (or `g`) jump to the oldest retained line · `end` (or `G`) jump to the
+  live tail
+- `b` / `esc` close the stream and return to the detail screen · `q` quit
 
 ## Stack
 
@@ -56,6 +63,7 @@ reshaping existing code:
 | `internal/tui`                       | Presentation layer (Bubble Tea/Lipgloss). Renders state, emits intents.          |
 | `internal/tui/dashboard`             | The main screen: card grid of registered applications, top bar — the entry point. |
 | `internal/tui/detail`                | Per-application administration screen: diagnose, start, stop, refresh.          |
+| `internal/tui/logs`                  | Real-time log viewer, opened from the detail screen.                           |
 | `internal/tui/wizard`                | Generic, feature-agnostic multi-step form engine used by every TUI wizard.       |
 | `internal/tui/wizards/application`   | Composes the wizard engine into the concrete "create application" flow.         |
 | `internal/validation`                | Reusable, composable input validators (Required, Port, Domain, URL, ...).        |
@@ -165,7 +173,7 @@ Four panels:
   than showing blank fields.
 - **Bottom** — the action bar, listing every keybinding the screen responds
   to, including the ones that don't do anything real yet (marked with `*`):
-  `s` start, `x` stop, `r`\* restart, `l`\* logs, `e`\* edit config, `f5`
+  `s` start, `x` stop, `l` logs, `r`\* restart, `e`\* edit config, `f5`
   refresh, `b`/`esc` back, `q` quit. No dead keys — every one of them
   produces a visible status message.
 
@@ -180,7 +188,60 @@ tracked. `f5` is the *only* refresh — there is no automatic/periodic
 polling yet — and it re-runs both the health check and, if a session is
 tracked, `ExecutionService.RefreshSession` (backed by the new
 `Strategy.Status` method, see "Execution engine") to notice if the process
-died on its own since the screen last checked.
+died on its own since the screen last checked. `l` opens the real-time logs
+screen (see below) for the tracked session — refused with a status message
+when nothing is running yet, never a dead key.
+
+### Real-time Logs
+
+The log system is designed to be **technology-agnostic from the start** —
+no part of its contract mentions Node, and every future `Strategy`
+(Python, Go, Docker, systemd, ...) exposes its own logs the same way.
+
+**Contract (`internal/execution`):** a `Strategy` never writes to the UI
+directly — it only produces a `LogStream`, opened via
+`Strategy.Logs(ctx, app, session)`. `LogStream` is deliberately not a bare
+`io.Reader`: `Events() <-chan LogEvent` (closed when the stream ends),
+`Err() error` (why it ended, if abnormally), `Close() error` (stop
+receiving — never affects the underlying process). Each `LogEvent` carries
+a `Timestamp`, a `Type` (`stdout`/`stderr`/`system`/`error`/`eof` — a fixed,
+technology-agnostic vocabulary, never free text), and `Content`.
+
+**Capture (`internal/runtimehost`):** `Host` gained `StreamOutput(pid)
+(OutputStream, error)`. Capture begins the moment `StartProcess` runs, not
+when a log viewer happens to open — `LinuxHost.StartProcess` pipes the
+child's stdout/stderr through `bufio.Scanner`s into a per-PID
+`outputBuffer`: a bounded (`defaultOutputBufferCapacity = 2000` lines),
+condition-variable-backed ring buffer that any number of `OutputStream`
+subscribers can attach to independently, each replaying whatever backlog is
+still retained and then receiving new lines live. This is why `Strategy.Logs`
+never starts a new process — it attaches to output that was already
+flowing.
+
+**Node's implementation** (`node_strategy_logs.go`) adapts
+`runtimehost.OutputChunk` into `execution.LogEvent` (`stdout`/`stderr` by
+which pipe a chunk came from), appending one final synthetic event once the
+underlying stream ends — `eof` on a clean exit, `error` if capture ended
+abnormally.
+
+**`ExecutionService.OpenLogs`** resolves the application's strategy, calls
+its `Logs`, and adapts the result into a `services.LogStream`/`LogEvent`
+pair (`Type` downgraded to a plain `string`) so `internal/tui` never needs
+to import `internal/execution`.
+
+**`internal/tui/logs`** is the viewer screen, opened from the detail
+screen's `l` key and returned from via its own `BackMsg` (which also calls
+`stream.Close()` first). It holds a `ringBuffer` of received `LogEvent`s —
+its own **configurable, bounded** scrollback (`DefaultBufferCapacity =
+2000`, overridable via `NewWithCapacity`) — separate from `runtimehost`'s
+own bounded capture, so memory is capped at both the point of capture and
+the point of display. Each line renders with a literal text prefix
+(`out`/`err`/`sys`/`ERR`/`end`) plus a reserved color — matching the
+project's data-viz convention of never relying on color alone. Scrolling
+(`↑`/`↓`, `pgup`/`pgdown`, `home`/`end`) is tracked via a `followLive` flag:
+true pins the view to the newest lines (so incoming output keeps scrolling
+into view, like `tail -f`); scrolling up disables it, and scrolling back
+down to the bottom (or pressing `end`) re-enables it.
 
 ### Runtime Host
 
@@ -193,22 +254,30 @@ never depends on them.
 - **`Host`** — the interface: `LookPath` (is a tool on PATH — "not found" is
   a normal result, not an error), `Version` (run a tool's version flag and
   report it structurally), `Run`/`RunCaptured` (synchronous), `ReadFile`,
-  `WorkingDir`, `FileExists`/`DirExists`, and `StartProcess`/
+  `WorkingDir`, `FileExists`/`DirExists`, `StartProcess`/
   `IsProcessRunning`/`StopProcess` for a long-running background process
-  (no supervision/auto-restart yet — that's a later iteration).
+  (no supervision/auto-restart yet — that's a later iteration), and
+  `StreamOutput(pid) (OutputStream, error)` for that process's captured
+  stdout/stderr.
 - **`LinuxHost`** — the real implementation, backed by `os/exec` and `os`.
   `StartProcess` tracks the resulting `*os.Process` and reaps it in a
   background goroutine once it exits, so a long-running child (a web
   server, say) never becomes a zombie even though nothing calls `Wait()`
   explicitly; `IsProcessRunning`/`StopProcess` fall back to a raw
   PID-based OS check when a PID isn't one this Host instance started
-  itself.
+  itself. `StartProcess` also pipes the child's stdout/stderr through
+  `bufio.Scanner`s into a bounded, per-PID `outputBuffer` (capacity 2000
+  lines, evicting oldest) from the moment it starts — `StreamOutput`
+  subscribes to that buffer, replaying its backlog and then forwarding new
+  lines live to as many independent subscribers as call it; capture, not
+  `StreamOutput`, is what actually starts reading the process's pipes, so
+  logs opened well after a process started still show its recent history.
 - **`runtimehosttest.FakeHost`** — a builder-style test double
   (`WithLookPath`/`WithVersion`/`WithRunResult`/`WithReadFile`/
-  `WithStartProcess`/`WithRunningPID`/`WithStopError`/...) in its own
-  importable subpackage (not `_test.go`), so execution strategies' tests
-  depend on deterministic, configured responses instead of whatever happens
-  to be installed on the machine running them.
+  `WithStartProcess`/`WithRunningPID`/`WithStopError`/`WithOutputStream`/...)
+  in its own importable subpackage (not `_test.go`), so execution
+  strategies' tests depend on deterministic, configured responses instead
+  of whatever happens to be installed on the machine running them.
 
 Structured models instead of bare errors: `CommandResult` (exit code,
 captured stdout/stderr, duration), `ToolAvailability`/`ToolInfo` (found vs.
@@ -226,9 +295,10 @@ started, stopped, restarted and updated. Three pieces:
   `Metadata()`, `HealthCheck`/`Readiness` (diagnostics), `Start`/`Stop`
   (session-aware execution), `Status` (re-checks whether a previously
   returned `Session` is still alive — a point-in-time query, never
-  mutating or persisting anything), and `Install`/`Build`/`Restart`/`Update`
-  (still `execution.ErrNotImplemented` for every strategy, Node included —
-  out of scope so far).
+  mutating or persisting anything), `Logs` (opens a `LogStream` over a
+  session's captured output — see "Real-time Logs"), and
+  `Install`/`Build`/`Restart`/`Update` (still `execution.ErrNotImplemented`
+  for every strategy, Node included — out of scope so far).
 - **`Registry`** — where strategies register themselves (`Register(strategy)`).
   Adding a new technology never means editing existing code, only
   constructing its `Strategy` and registering it.
