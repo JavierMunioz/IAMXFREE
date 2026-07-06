@@ -1,0 +1,19 @@
+# Binaries
+/bin/
+/dist/
+
+# Go
+*.test
+*.out
+vendor/
+
+# OS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Claude Code local tooling (not part of the project)
+.agents/
+skills-lock.json
