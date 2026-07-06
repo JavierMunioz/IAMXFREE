@@ -7,10 +7,11 @@ component.
 
 ## Status
 
-Early scaffolding. The interactive dashboard, application registration flow
-and infrastructure managers (Nginx, Apache, process supervision, etc.) do not
-exist yet — this repository currently only proves the base plumbing:
-Cobra-driven CLI → Bubble Tea TUI shell.
+Early scaffolding. The application-registration wizard is implemented and
+persists to the JSON store; the card/panel dashboard and infrastructure
+managers (Nginx, Apache, process supervision, etc.) do not exist yet.
+
+From the running TUI: press `a` to register a new application, `q` to quit.
 
 ## Stack
 
@@ -31,20 +32,42 @@ The codebase is split by responsibility so that new technologies (a new
 process supervisor, a new reverse proxy, a new plugin) can be added without
 reshaping existing code:
 
-| Package                  | Responsibility                                                          |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `cmd/iamxfree`            | Entrypoint binary. Stays thin; delegates to `internal/cli`.             |
-| `internal/cli`            | Command/flag parsing (Cobra). No business logic.                        |
-| `internal/tui`            | Presentation layer (Bubble Tea/Lipgloss). Renders state, emits intents. |
-| `internal/core`           | Orchestrates services/managers/repositories for each use case.          |
-| `internal/managers`       | Concrete resource managers: processes, Nginx, Apache, env files, etc.   |
-| `internal/services`       | Business logic coordinating managers + repositories.                    |
-| `internal/models`         | Domain entities (Application, Deployment, ...).                         |
-| `internal/repositories`   | Persistence of IAMXFREE's own state.                                    |
-| `internal/adapters`       | Integration with external systems (systemd, git, ssh, ...).             |
-| `internal/infrastructure` | Cross-cutting concerns: logging, process execution, filesystem.         |
-| `internal/config`         | IAMXFREE's own configuration loading/validation.                        |
-| `internal/plugins`        | Reserved extension point for future technologies.                       |
+| Package                             | Responsibility                                                                   |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| `cmd/iamxfree`                       | Entrypoint binary. Stays thin; delegates to `internal/cli`.                      |
+| `internal/cli`                       | Command/flag parsing (Cobra). Wires repositories/services and starts the TUI.    |
+| `internal/tui`                       | Presentation layer (Bubble Tea/Lipgloss). Renders state, emits intents.          |
+| `internal/tui/wizard`                | Generic, feature-agnostic multi-step form engine used by every TUI wizard.       |
+| `internal/tui/wizards/application`   | Composes the wizard engine into the concrete "create application" flow.         |
+| `internal/validation`                | Reusable, composable input validators (Required, Port, Domain, URL, ...).        |
+| `internal/core`                      | Orchestrates services/managers/repositories for each use case.                  |
+| `internal/managers`                  | Concrete resource managers: processes, Nginx, Apache, env files, etc.           |
+| `internal/services`                  | Business logic coordinating managers + repositories (e.g. ApplicationService).  |
+| `internal/models`                    | Domain entities (Application, ApplicationDraft, ...).                           |
+| `internal/repositories`              | Persistence contracts for IAMXFREE's own state.                                |
+| `internal/repositories/jsonstore`    | JSON-file-backed implementation of those contracts (one file per entity).       |
+| `internal/adapters`                  | Integration with external systems (systemd, git, ssh, ...).                     |
+| `internal/infrastructure`            | Cross-cutting concerns: logging, process execution, filesystem.                 |
+| `internal/config`                    | IAMXFREE's own configuration loading/validation.                                |
+| `internal/plugins`                   | Reserved extension point for future technologies.                               |
+
+### Wizards
+
+`internal/tui/wizard` is a generic engine: it sequences a list of `Step`
+values and hands back a `Result` once the last one is confirmed. It has no
+notion of "application", "Nginx" or anything else domain-specific — it only
+knows `Step.Focus/Update/View/Validate/Value/Modal`. Reusable step kinds
+(`TextStep`, `ChoiceStep`, `SummaryStep`) live in that same package. Each
+concrete wizard (creating an application today; Nginx, SSL, systemd units,
+etc. later) gets its own subpackage under `internal/tui/wizards/` that
+composes those generic steps and maps the resulting `Result` into a
+feature-specific draft type — the engine itself never needs to change to add
+a new wizard or a new step to an existing one.
+
+The wizard never persists anything itself. Whatever hosts it (today,
+`internal/tui`'s `RootModel`) converts its `Result` into a domain draft, then
+calls the relevant service (e.g. `ApplicationService.Register`), which
+validates, checks for conflicts, and persists through the repository layer.
 
 `internal/` is used deliberately: nothing here is meant to be imported by
 other Go modules, which keeps the project free to change its internals
