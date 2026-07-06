@@ -62,4 +62,13 @@ type Host interface {
 	// already being captured; backlog is bounded, so very old output may
 	// already be gone. Fails if pid was never started by this Host.
 	StreamOutput(pid int) (OutputStream, error)
+
+	// ProcessResources queries the operating system for pid's current
+	// resource usage: CPU time and memory footprint. It never fabricates a
+	// value — any metric that could not be determined (e.g. running on a
+	// platform without /proc, or pid no longer existing) is reported as
+	// unavailable through ProcessResources' Known flags rather than a
+	// fabricated zero. This is a read-only observation; it never affects
+	// pid.
+	ProcessResources(pid int) (ProcessResources, error)
 }

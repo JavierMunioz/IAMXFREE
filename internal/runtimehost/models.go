@@ -85,3 +85,27 @@ func (e *ExecutionError) Error() string {
 }
 
 func (e *ExecutionError) Unwrap() error { return e.Err }
+
+// ProcessResources is what the operating system currently reports about a
+// running process's resource consumption — CPU time and memory footprint —
+// queried directly from the OS rather than derived from anything the
+// process itself reports. Any field that could not be determined
+// (unsupported platform, permission denied, process no longer exists) is
+// left at its zero value with its companion *Known flag false; callers
+// must check the flag before trusting the value, never assume zero means
+// "no usage".
+type ProcessResources struct {
+	// CPUPercent is the process's average CPU utilization since it
+	// started (total CPU time consumed divided by wall-clock lifetime),
+	// not an instantaneous sample — a true instantaneous reading would
+	// require two samples spaced over an interval, which needs polling
+	// infrastructure this iteration does not implement.
+	CPUPercent      float64
+	CPUPercentKnown bool
+
+	MemoryRSSBytes uint64
+	MemoryRSSKnown bool
+
+	MemoryVSZBytes uint64
+	MemoryVSZKnown bool
+}
