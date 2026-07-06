@@ -31,6 +31,8 @@ type FakeHost struct {
 	stoppedPIDs         map[int]bool
 
 	outputStreams map[int]outputStreamResult
+
+	processResources map[int]runtimehost.ProcessResources
 }
 
 type outputStreamResult struct {
@@ -60,6 +62,7 @@ func NewFakeHost() *FakeHost {
 		stopErrors:          make(map[int]error),
 		stoppedPIDs:         make(map[int]bool),
 		outputStreams:       make(map[int]outputStreamResult),
+		processResources:    make(map[int]runtimehost.ProcessResources),
 	}
 }
 
@@ -149,6 +152,15 @@ func (f *FakeHost) WithOutputStream(pid int, chunks []runtimehost.OutputChunk, e
 	return f
 }
 
+// WithProcessResources makes ProcessResources(pid) return resources.
+// Anything not configured returns a zero-value ProcessResources — every
+// metric reported as unavailable — matching how a real Host degrades on a
+// platform without /proc, rather than an error.
+func (f *FakeHost) WithProcessResources(pid int, resources runtimehost.ProcessResources) *FakeHost {
+	f.processResources[pid] = resources
+	return f
+}
+
 func (f *FakeHost) LookPath(name string) (runtimehost.ToolAvailability, error) {
 	if avail, ok := f.lookPaths[name]; ok {
 		return avail, nil
@@ -225,6 +237,10 @@ func (f *FakeHost) StopProcess(pid int) error {
 	}
 	f.runningPIDs[pid] = false
 	return nil
+}
+
+func (f *FakeHost) ProcessResources(pid int) (runtimehost.ProcessResources, error) {
+	return f.processResources[pid], nil
 }
 
 func (f *FakeHost) StreamOutput(pid int) (runtimehost.OutputStream, error) {

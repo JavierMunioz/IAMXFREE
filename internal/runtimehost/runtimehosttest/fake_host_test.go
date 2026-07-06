@@ -303,3 +303,39 @@ func TestFakeHostStreamOutputUnconfiguredReturnsError(t *testing.T) {
 		t.Fatal("expected an error for an unconfigured pid")
 	}
 }
+
+func TestFakeHostProcessResourcesConfigured(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().
+		WithProcessResources(4242, runtimehost.ProcessResources{
+			CPUPercent:      12.5,
+			CPUPercentKnown: true,
+			MemoryRSSBytes:  1024 * 1024,
+			MemoryRSSKnown:  true,
+		})
+
+	resources, err := host.ProcessResources(4242)
+	if err != nil {
+		t.Fatalf("ProcessResources() error = %v", err)
+	}
+	if !resources.CPUPercentKnown || resources.CPUPercent != 12.5 {
+		t.Errorf("CPUPercent = %v, known=%v, want 12.5, true", resources.CPUPercent, resources.CPUPercentKnown)
+	}
+	if !resources.MemoryRSSKnown || resources.MemoryRSSBytes != 1024*1024 {
+		t.Errorf("MemoryRSSBytes = %d, known=%v, want %d, true", resources.MemoryRSSBytes, resources.MemoryRSSKnown, 1024*1024)
+	}
+	if resources.MemoryVSZKnown {
+		t.Error("expected MemoryVSZKnown to be false since it was never configured")
+	}
+}
+
+func TestFakeHostProcessResourcesUnconfiguredReportsUnavailable(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+
+	resources, err := host.ProcessResources(4242)
+	if err != nil {
+		t.Fatalf("ProcessResources() error = %v, want nil", err)
+	}
+	if resources.CPUPercentKnown || resources.MemoryRSSKnown || resources.MemoryVSZKnown {
+		t.Fatalf("expected every metric to be unavailable, got %+v", resources)
+	}
+}
