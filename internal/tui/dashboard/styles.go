@@ -43,7 +43,11 @@ var (
 			BorderForeground(colorBorder).
 			Padding(0, 1)
 
+	// The selected card uses a distinct border shape (thick vs. rounded), not
+	// just a different color, so the active card is unambiguous even on
+	// terminals with limited or no color support.
 	cardSelectedStyle = cardStyle.
+				Border(lipgloss.ThickBorder()).
 				BorderForeground(colorAccent).
 				Bold(true)
 
