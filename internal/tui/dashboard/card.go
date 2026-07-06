@@ -50,7 +50,24 @@ func (m Model) renderCard(app *models.Application, selected bool) string {
 		mutedStyle.Render(truncate(orDash(app.Config.Domain), cardWidth)),
 	}
 
+	if health, ok := m.healthByID[app.ID]; ok {
+		lines = append(lines,
+			mutedStyle.Render(truncate("Strategy: "+health.StrategyName, cardWidth)),
+			renderHealthLine(health.Healthy),
+		)
+	}
+
 	return style.Width(cardWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+// renderHealthLine shows execution health with both an icon and a label —
+// never color alone — following the same status-color convention as the
+// application's own run status.
+func renderHealthLine(healthy bool) string {
+	if healthy {
+		return lipgloss.NewStyle().Foreground(colorGood).Render("● Health: healthy")
+	}
+	return lipgloss.NewStyle().Foreground(colorCritical).Render("✕ Health: unhealthy")
 }
 
 func orDash(value string) string {

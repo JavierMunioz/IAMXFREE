@@ -32,6 +32,14 @@ type appsLoadFailedMsg struct {
 	err error
 }
 
+// healthLoadedMsg carries execution health, keyed by application ID, for
+// whichever applications have a resolvable execution.Strategy. An
+// application missing from the map simply has no strategy yet — that's not
+// an error, just nothing to show.
+type healthLoadedMsg struct {
+	healthByID map[string]services.ExecutionHealth
+}
+
 type tickMsg time.Time
 
 // Model is the dashboard screen. It depends only on services.ApplicationService
@@ -40,9 +48,10 @@ type tickMsg time.Time
 type Model struct {
 	service services.ApplicationService
 
-	apps     []*models.Application
-	selected int
-	mode     viewMode
+	apps       []*models.Application
+	healthByID map[string]services.ExecutionHealth
+	selected   int
+	mode       viewMode
 
 	width  int
 	height int
@@ -77,6 +86,25 @@ func (m Model) Reload() tea.Cmd {
 			return apps[i].CreatedAt.Before(apps[j].CreatedAt)
 		})
 		return appsLoadedMsg{apps: apps}
+	}
+}
+
+// loadHealthCmd fetches execution health for every currently loaded
+// application. It is enrichment, not core data: an application whose health
+// could not be determined (no strategy, or a lookup error) is simply left
+// out of the result rather than failing the whole batch.
+func (m Model) loadHealthCmd() tea.Cmd {
+	service := m.service
+	apps := m.apps
+	return func() tea.Msg {
+		healthByID := make(map[string]services.ExecutionHealth, len(apps))
+		for _, app := range apps {
+			health, err := service.CheckExecutionHealth(context.Background(), app.ID)
+			if err == nil {
+				healthByID[app.ID] = health
+			}
+		}
+		return healthLoadedMsg{healthByID: healthByID}
 	}
 }
 
@@ -119,11 +147,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selected < 0 {
 			m.selected = 0
 		}
-		return m, nil
+		return m, m.loadHealthCmd()
 
 	case appsLoadFailedMsg:
 		m.loading = false
 		m.loadErr = msg.err
+		return m, nil
+
+	case healthLoadedMsg:
+		m.healthByID = msg.healthByID
 		return m, nil
 
 	case tea.KeyMsg:

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
+	"github.com/JavierMunioz/IAMXFREE/internal/services"
 )
 
 func TestRenderCardShowsCoreFields(t *testing.T) {
@@ -81,4 +82,43 @@ func TestRenderGridProducesOneRowPerColumnCount(t *testing.T) {
 func renderTestCard(app *models.Application, selected bool) string {
 	m := New(&fakeService{})
 	return m.renderCard(app, selected)
+}
+
+func TestRenderCardShowsStrategyAndHealthWhenResolved(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	m := New(&fakeService{})
+	m.healthByID = map[string]services.ExecutionHealth{
+		app.ID: {StrategyName: "Node.js (npm)", Healthy: true},
+	}
+
+	card := stripANSI(t, m.renderCard(app, false))
+	if !strings.Contains(card, "Strategy: Node.js (npm)") {
+		t.Errorf("card missing strategy line:\n%s", card)
+	}
+	if !strings.Contains(card, "Health: healthy") {
+		t.Errorf("card missing healthy health line:\n%s", card)
+	}
+}
+
+func TestRenderCardShowsUnhealthy(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	m := New(&fakeService{})
+	m.healthByID = map[string]services.ExecutionHealth{
+		app.ID: {StrategyName: "Node.js (npm)", Healthy: false},
+	}
+
+	card := stripANSI(t, m.renderCard(app, false))
+	if !strings.Contains(card, "Health: unhealthy") {
+		t.Errorf("card missing unhealthy health line:\n%s", card)
+	}
+}
+
+func TestRenderCardOmitsStrategyWhenNoneResolved(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	m := New(&fakeService{}) // no health configured for this app
+
+	card := stripANSI(t, m.renderCard(app, false))
+	if strings.Contains(card, "Strategy:") || strings.Contains(card, "Health:") {
+		t.Errorf("expected no strategy/health lines when unresolved, got:\n%s", card)
+	}
 }

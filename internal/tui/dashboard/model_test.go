@@ -16,6 +16,7 @@ import (
 type fakeService struct {
 	apps    []*models.Application
 	listErr error
+	health  map[string]services.ExecutionHealth
 }
 
 func (f *fakeService) Register(context.Context, *models.Application) error { return nil }
@@ -35,8 +36,12 @@ func (f *fakeService) Remove(context.Context, string) error { return nil }
 func (f *fakeService) ResolveExecutionStrategy(context.Context, string) (execution.Metadata, error) {
 	return execution.Metadata{}, execution.ErrNoStrategyFound
 }
-func (f *fakeService) CheckExecutionHealth(context.Context, string) (services.ExecutionHealth, error) {
-	return services.ExecutionHealth{}, execution.ErrNoStrategyFound
+func (f *fakeService) CheckExecutionHealth(_ context.Context, id string) (services.ExecutionHealth, error) {
+	health, ok := f.health[id]
+	if !ok {
+		return services.ExecutionHealth{}, execution.ErrNoStrategyFound
+	}
+	return health, nil
 }
 
 func newApp(name string, createdAt time.Time) *models.Application {
@@ -138,6 +143,57 @@ func TestSetStatusAndSetErrorAreMutuallyExclusive(t *testing.T) {
 	m = m.SetError(errors.New("failed"))
 	if m.statusErr == nil || m.status != "" {
 		t.Fatalf("after SetError: status=%q statusErr=%v", m.status, m.statusErr)
+	}
+}
+
+func TestAppsLoadedTriggersHealthLoad(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	svc := &fakeService{health: map[string]services.ExecutionHealth{
+		app.ID: {StrategyName: "Node.js (npm)", Healthy: true},
+	}}
+	m := New(svc)
+
+	updated, cmd := m.Update(appsLoadedMsg{apps: []*models.Application{app}})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected appsLoadedMsg to also trigger a health-loading command")
+	}
+
+	msg := cmd()
+	loaded, ok := msg.(healthLoadedMsg)
+	if !ok {
+		t.Fatalf("expected healthLoadedMsg, got %T", msg)
+	}
+	if loaded.healthByID[app.ID].StrategyName != "Node.js (npm)" {
+		t.Fatalf("healthByID[%s] = %+v, want strategy Node.js (npm)", app.ID, loaded.healthByID[app.ID])
+	}
+}
+
+func TestHealthLoadedUpdatesModel(t *testing.T) {
+	m := New(&fakeService{})
+
+	updated, _ := m.Update(healthLoadedMsg{healthByID: map[string]services.ExecutionHealth{
+		"app-1": {StrategyName: "Node.js (npm)", Healthy: true},
+	}})
+	m = updated.(Model)
+
+	if m.healthByID["app-1"].StrategyName != "Node.js (npm)" {
+		t.Fatalf("healthByID = %+v, want an entry for app-1", m.healthByID)
+	}
+}
+
+func TestLoadHealthCmdOmitsAppsWithoutAResolvableStrategy(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	m := New(&fakeService{}) // no health configured -> ErrNoStrategyFound for every app
+	m.apps = []*models.Application{app}
+
+	msg := m.loadHealthCmd()()
+	loaded, ok := msg.(healthLoadedMsg)
+	if !ok {
+		t.Fatalf("expected healthLoadedMsg, got %T", msg)
+	}
+	if _, present := loaded.healthByID[app.ID]; present {
+		t.Fatal("expected an app with no resolvable strategy to be omitted from healthByID")
 	}
 }
 
