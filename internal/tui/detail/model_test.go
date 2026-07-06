@@ -84,6 +84,8 @@ func keyMsg(s string) tea.KeyMsg {
 	switch s {
 	case "esc":
 		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "f5":
+		return tea.KeyMsg{Type: tea.KeyF5}
 	default:
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	}

@@ -170,6 +170,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.SetError(msg.err)
 		return m, nil
 
+	case sessionRefreshedMsg:
+		m.session = msg.session
+		m = m.SetStatus("Refreshed.")
+		return m, nil
+
+	case sessionRefreshFailedMsg:
+		m = m.SetError(msg.err)
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}

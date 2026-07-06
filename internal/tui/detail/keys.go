@@ -26,6 +26,10 @@ func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m = m.SetStatus("Stopping…")
 		return m, m.stopCmd()
+
+	case "f5":
+		m = m.SetStatus("Refreshing…")
+		return m, m.refreshCmd()
 	}
 
 	return m, nil
