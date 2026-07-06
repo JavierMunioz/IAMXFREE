@@ -35,7 +35,12 @@ func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
 		return m.SetStatus("Restart is not implemented yet."), nil
 
 	case "l":
-		return m.SetStatus("Logs are not implemented yet."), nil
+		if !m.hasSession {
+			return m.SetStatus("No active session to show logs for."), nil
+		}
+		appID := m.appID
+		session := m.session
+		return m, func() tea.Msg { return OpenLogsMsg{AppID: appID, Session: session} }
 
 	case "e":
 		return m.SetStatus("Editing configuration is not implemented yet."), nil

@@ -19,6 +19,14 @@ import (
 // beyond this — whatever hosts it decides what happens next.
 type BackMsg struct{}
 
+// OpenLogsMsg signals that the user asked to open the real-time logs view
+// for the currently tracked session. The detail view has no notion of
+// "logs view" beyond this — whatever hosts it decides what happens next.
+type OpenLogsMsg struct {
+	AppID   string
+	Session services.RunSession
+}
+
 type appLoadedMsg struct {
 	app *models.Application
 }

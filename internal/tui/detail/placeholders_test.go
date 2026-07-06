@@ -13,7 +13,6 @@ func TestPlaceholderKeysReportNotImplemented(t *testing.T) {
 		want string
 	}{
 		{"r", "Restart"},
-		{"l", "Logs"},
 		{"e", "Editing configuration"},
 	}
 
