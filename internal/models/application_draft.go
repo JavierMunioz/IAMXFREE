@@ -16,6 +16,11 @@ type ApplicationDraft struct {
 	Port      int
 	Domain    string
 	RepoURL   string
+
+	PackageManager string
+	InstallCommand string
+	BuildCommand   string
+	StartCommand   string
 }
 
 // ToApplication converts the draft into a persistable Application. This is
@@ -29,8 +34,12 @@ func (d ApplicationDraft) ToApplication() *Application {
 		RepositoryURL: d.RepoURL,
 	}
 	app.Config = DeploymentConfig{
-		InternalPort: d.Port,
-		Domain:       d.Domain,
+		InternalPort:   d.Port,
+		Domain:         d.Domain,
+		PackageManager: d.PackageManager,
+		InstallCommand: d.InstallCommand,
+		BuildCommand:   d.BuildCommand,
+		StartCommand:   d.StartCommand,
 	}
 	return app
 }

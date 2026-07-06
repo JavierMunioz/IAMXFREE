@@ -11,6 +11,11 @@ type DeploymentConfig struct {
 	Subdomain    string `json:"subdomain,omitempty"`
 	EnvFile      string `json:"env_file,omitempty"`
 
+	// PackageManager names the tool used to install/run dependencies (e.g.
+	// "npm", "pnpm", "poetry"). Future execution.Strategy implementations
+	// for a given runtime will need this to pick the right command.
+	PackageManager string `json:"package_manager,omitempty"`
+
 	InstallCommand string `json:"install_command,omitempty"`
 	BuildCommand   string `json:"build_command,omitempty"`
 	StartCommand   string `json:"start_command,omitempty"`

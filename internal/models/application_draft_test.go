@@ -8,14 +8,18 @@ import (
 
 func TestApplicationDraftToApplication(t *testing.T) {
 	draft := models.ApplicationDraft{
-		Name:      "my-api",
-		Type:      models.ApplicationTypeAPI,
-		Framework: models.FrameworkFastAPI,
-		Runtime:   models.RuntimePython,
-		Path:      "/srv/apps/my-api",
-		Port:      8000,
-		Domain:    "my-api.example.com",
-		RepoURL:   "https://github.com/user/my-api.git",
+		Name:           "my-api",
+		Type:           models.ApplicationTypeAPI,
+		Framework:      models.FrameworkFastAPI,
+		Runtime:        models.RuntimePython,
+		Path:           "/srv/apps/my-api",
+		Port:           8000,
+		Domain:         "my-api.example.com",
+		RepoURL:        "https://github.com/user/my-api.git",
+		PackageManager: "uv",
+		InstallCommand: "uv sync",
+		BuildCommand:   "",
+		StartCommand:   "uvicorn main:app",
 	}
 
 	app := draft.ToApplication()
@@ -46,6 +50,15 @@ func TestApplicationDraftToApplication(t *testing.T) {
 	}
 	if app.Config.Domain != draft.Domain {
 		t.Errorf("Config.Domain = %q, want %q", app.Config.Domain, draft.Domain)
+	}
+	if app.Config.PackageManager != draft.PackageManager {
+		t.Errorf("Config.PackageManager = %q, want %q", app.Config.PackageManager, draft.PackageManager)
+	}
+	if app.Config.InstallCommand != draft.InstallCommand {
+		t.Errorf("Config.InstallCommand = %q, want %q", app.Config.InstallCommand, draft.InstallCommand)
+	}
+	if app.Config.StartCommand != draft.StartCommand {
+		t.Errorf("Config.StartCommand = %q, want %q", app.Config.StartCommand, draft.StartCommand)
 	}
 	if err := app.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v, want nil", err)
