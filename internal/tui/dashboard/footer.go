@@ -1,12 +1,9 @@
 package dashboard
 
-// renderFooter shows the keybindings available in the current mode. Some
-// actions (edit, delete) are listed even though they are not implemented
-// yet — pressing them tells the user so via the status line instead of
-// doing nothing silently.
+// renderFooter shows the keybindings available on the dashboard. Editing,
+// deleting and every other per-application action now live in the detail
+// view (opened with enter); the dashboard itself is just the list and the
+// entry point.
 func (m Model) renderFooter() string {
-	if m.mode == viewDetail {
-		return footerStyle.Render("esc: back  ·  q: quit")
-	}
-	return footerStyle.Render("a: new application  ·  enter: open  ·  e: edit  ·  d: delete  ·  r: refresh  ·  q: quit")
+	return footerStyle.Render("a: new application  ·  enter: open  ·  r: refresh  ·  q: quit")
 }

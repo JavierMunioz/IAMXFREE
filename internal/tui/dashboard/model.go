@@ -12,17 +12,17 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 )
 
-type viewMode int
-
-const (
-	viewGrid viewMode = iota
-	viewDetail
-)
-
 // OpenWizardMsg signals that the user asked to register a new application.
 // The dashboard has no notion of "wizard" beyond this — whatever hosts it
 // decides what happens next.
 type OpenWizardMsg struct{}
+
+// OpenDetailMsg signals that the user asked to open the detail view for one
+// application. The dashboard has no notion of "detail view" beyond this —
+// whatever hosts it decides what happens next.
+type OpenDetailMsg struct {
+	AppID string
+}
 
 type appsLoadedMsg struct {
 	apps []*models.Application
@@ -51,7 +51,6 @@ type Model struct {
 	apps       []*models.Application
 	healthByID map[string]services.ExecutionHealth
 	selected   int
-	mode       viewMode
 
 	width  int
 	height int
@@ -191,12 +190,8 @@ func (m Model) renderStatusLine() string {
 }
 
 func (m Model) renderBody() string {
-	switch {
-	case m.mode == viewDetail:
-		return m.renderDetail()
-	case len(m.apps) == 0:
+	if len(m.apps) == 0 {
 		return m.renderEmptyState()
-	default:
-		return m.renderGrid()
 	}
+	return m.renderGrid()
 }

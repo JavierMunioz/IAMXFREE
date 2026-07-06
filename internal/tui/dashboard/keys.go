@@ -2,24 +2,11 @@ package dashboard
 
 import tea "github.com/charmbracelet/bubbletea"
 
+// handleKey processes every key while the dashboard is the active screen.
+// The dashboard itself is now purely a list and an entry point — opening an
+// application (Enter) hands off to whatever hosts it via OpenDetailMsg
+// rather than switching to an internal detail mode.
 func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
-	if m.mode == viewDetail {
-		return m.handleDetailKey(key)
-	}
-	return m.handleGridKey(key)
-}
-
-func (m Model) handleDetailKey(key tea.KeyMsg) (Model, tea.Cmd) {
-	switch key.String() {
-	case "q", "ctrl+c":
-		return m, tea.Quit
-	case "esc", "enter":
-		m.mode = viewGrid
-	}
-	return m, nil
-}
-
-func (m Model) handleGridKey(key tea.KeyMsg) (Model, tea.Cmd) {
 	switch key.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -33,17 +20,8 @@ func (m Model) handleGridKey(key tea.KeyMsg) (Model, tea.Cmd) {
 
 	case "enter":
 		if len(m.apps) > 0 {
-			m.mode = viewDetail
-		}
-
-	case "e":
-		if len(m.apps) > 0 {
-			m = m.SetStatus("Editing is not implemented yet.")
-		}
-
-	case "d":
-		if len(m.apps) > 0 {
-			m = m.SetStatus("Deleting is not implemented yet.")
+			appID := m.apps[m.selected].ID
+			return m, func() tea.Msg { return OpenDetailMsg{AppID: appID} }
 		}
 
 	case "left":

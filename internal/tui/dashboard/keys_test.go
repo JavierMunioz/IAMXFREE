@@ -104,37 +104,29 @@ func TestTabWrapsAround(t *testing.T) {
 	}
 }
 
-func TestEnterOpensDetailAndEscCloses(t *testing.T) {
+func TestEnterEmitsOpenDetailMsgForSelectedApp(t *testing.T) {
 	m := modelWithApps(3)
-	m, _ = sendKey(t, m, "enter")
-	if m.mode != viewDetail {
-		t.Fatal("expected enter to open the detail view")
+	m.selected = 1
+	wantID := m.apps[1].ID
+
+	_, cmd := sendKey(t, m, "enter")
+	if cmd == nil {
+		t.Fatal("expected enter to return a command")
 	}
-	m, _ = sendKey(t, m, "esc")
-	if m.mode != viewGrid {
-		t.Fatal("expected esc to return to the grid view")
+	msg, ok := cmd().(OpenDetailMsg)
+	if !ok {
+		t.Fatalf("expected OpenDetailMsg, got %T", cmd())
+	}
+	if msg.AppID != wantID {
+		t.Fatalf("OpenDetailMsg.AppID = %q, want %q", msg.AppID, wantID)
 	}
 }
 
 func TestEnterDoesNothingWithNoApplications(t *testing.T) {
 	m := New(&fakeService{})
-	m, _ = sendKey(t, m, "enter")
-	if m.mode != viewGrid {
+	_, cmd := sendKey(t, m, "enter")
+	if cmd != nil {
 		t.Fatal("expected enter to be a no-op with zero applications")
-	}
-}
-
-func TestEditAndDeleteShowNotImplementedStatus(t *testing.T) {
-	m := modelWithApps(1)
-
-	m, _ = sendKey(t, m, "e")
-	if m.status == "" {
-		t.Fatal("expected a status message after pressing e")
-	}
-
-	m, _ = sendKey(t, m, "d")
-	if m.status == "" {
-		t.Fatal("expected a status message after pressing d")
 	}
 }
 
@@ -149,14 +141,5 @@ func TestRefreshTriggersReload(t *testing.T) {
 	}
 	if _, ok := cmd().(appsLoadedMsg); !ok {
 		t.Fatal("expected the reload command to eventually produce appsLoadedMsg")
-	}
-}
-
-func TestQuitFromDetailView(t *testing.T) {
-	m := modelWithApps(1)
-	m, _ = sendKey(t, m, "enter")
-	_, cmd := sendKey(t, m, "q")
-	if cmd == nil {
-		t.Fatal("expected quit to work from the detail view too")
 	}
 }
