@@ -40,12 +40,13 @@ func NewRootCommand() *cobra.Command {
 			resolver := execution.NewResolver(executionRegistry)
 
 			service := services.NewApplicationService(repo, resolver)
+			executionService := services.NewExecutionService(repo, resolver)
 
 			inspector := inspection.NewInspector(inspection.NewDefaultRegistry())
 			deploymentPlanner := planner.NewDeploymentPlanner(planner.NewDefaultRegistry())
 			setup := services.NewApplicationSetupService(inspector, deploymentPlanner)
 
-			return tui.Run(service, setup)
+			return tui.Run(service, executionService, setup)
 		},
 	}
 

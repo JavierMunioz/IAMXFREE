@@ -12,6 +12,7 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/detail"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizards/application"
 )
@@ -21,6 +22,7 @@ type screen int
 const (
 	screenDashboard screen = iota
 	screenWizard
+	screenDetail
 )
 
 // applicationRegisteredMsg is emitted once ApplicationService.Register
@@ -41,18 +43,21 @@ type applicationRegistrationFailedMsg struct {
 // the actual persistence decision to services.ApplicationService and the
 // project-analysis decision to services.ApplicationSetupService.
 type RootModel struct {
-	service services.ApplicationService
-	setup   services.ApplicationSetupService
+	service   services.ApplicationService
+	execution services.ExecutionService
+	setup     services.ApplicationSetupService
 
 	screen    screen
 	dashboard dashboard.Model
 	wizard    wizard.Model
+	detail    detail.Model
 }
 
 // NewRootModel builds the initial application model.
-func NewRootModel(service services.ApplicationService, setup services.ApplicationSetupService) RootModel {
+func NewRootModel(service services.ApplicationService, execution services.ExecutionService, setup services.ApplicationSetupService) RootModel {
 	return RootModel{
 		service:   service,
+		execution: execution,
 		setup:     setup,
 		screen:    screenDashboard,
 		dashboard: dashboard.New(service),
@@ -85,6 +90,15 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.wizard = wizard.New("New application", application.Steps(m.setup))
 		return m, m.wizard.Init()
 
+	case dashboard.OpenDetailMsg:
+		m.screen = screenDetail
+		m.detail = detail.New(m.service, m.execution, msg.AppID)
+		return m, m.detail.Init()
+
+	case detail.BackMsg:
+		m.screen = screenDashboard
+		return m, m.dashboard.Reload()
+
 	case applicationRegisteredMsg:
 		m.dashboard = m.dashboard.SetStatus(fmt.Sprintf("Application %q registered.", msg.app.Name))
 		return m, m.dashboard.Reload()
@@ -99,9 +113,15 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	if m.screen == screenWizard {
+	switch m.screen {
+	case screenWizard:
 		updated, cmd := m.wizard.Update(msg)
 		m.wizard = updated.(wizard.Model)
+		return m, cmd
+
+	case screenDetail:
+		updated, cmd := m.detail.Update(msg)
+		m.detail = updated.(detail.Model)
 		return m, cmd
 	}
 
@@ -121,15 +141,18 @@ func (m RootModel) registerCmd(app *models.Application) tea.Cmd {
 }
 
 func (m RootModel) View() string {
-	if m.screen == screenWizard {
+	switch m.screen {
+	case screenWizard:
 		return m.wizard.View()
+	case screenDetail:
+		return m.detail.View()
 	}
 	return m.dashboard.View()
 }
 
 // Run starts the Bubble Tea program using the terminal's real stdin/stdout.
-func Run(service services.ApplicationService, setup services.ApplicationSetupService) error {
-	program := tea.NewProgram(NewRootModel(service, setup), tea.WithAltScreen())
+func Run(service services.ApplicationService, execution services.ExecutionService, setup services.ApplicationSetupService) error {
+	program := tea.NewProgram(NewRootModel(service, execution, setup), tea.WithAltScreen())
 	_, err := program.Run()
 	return err
 }
