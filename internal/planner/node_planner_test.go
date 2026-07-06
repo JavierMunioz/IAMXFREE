@@ -49,6 +49,9 @@ func fullNodeDetection() inspection.Detection {
 func TestNodePlannerHappyPath(t *testing.T) {
 	plan := NewNodePlanner().Plan(fullNodeDetection(), inspection.Result{})
 
+	if plan.ProjectType != inspection.ProjectTypeNode {
+		t.Errorf("ProjectType = %q, want %q", plan.ProjectType, inspection.ProjectTypeNode)
+	}
 	if plan.SuggestedName != "my-api" {
 		t.Errorf("SuggestedName = %q, want %q", plan.SuggestedName, "my-api")
 	}

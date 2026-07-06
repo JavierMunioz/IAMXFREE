@@ -41,6 +41,7 @@ func (p *nodePlanner) CanPlan(detection inspection.Detection) bool {
 
 func (p *nodePlanner) Plan(detection inspection.Detection, result inspection.Result) DeploymentPlan {
 	plan := DeploymentPlan{
+		ProjectType:    detection.Type,
 		SuggestedName:  detection.Name,
 		Framework:      detection.Framework,
 		Runtime:        detection.Runtime,

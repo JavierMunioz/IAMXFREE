@@ -9,6 +9,10 @@ import (
 // from what an inspection.Result found. It is only a proposal: nothing in
 // this package runs a command, writes a file, or persists anything.
 type DeploymentPlan struct {
+	// ProjectType is the detected technology that produced this plan (e.g.
+	// inspection.ProjectTypeNode), or empty if nothing was detected.
+	ProjectType inspection.ProjectType
+
 	// General information
 	SuggestedName  string
 	Type           models.ApplicationType

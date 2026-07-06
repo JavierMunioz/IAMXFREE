@@ -39,7 +39,8 @@ func (p *DeploymentPlanner) Plan(result inspection.Result) DeploymentPlan {
 	}
 
 	return DeploymentPlan{
-		Confidence: inspection.ConfidenceLow,
-		Warnings:   []string{fmt.Sprintf("no planner is registered for %q projects yet", primary.Type)},
+		ProjectType: primary.Type,
+		Confidence:  inspection.ConfidenceLow,
+		Warnings:    []string{fmt.Sprintf("no planner is registered for %q projects yet", primary.Type)},
 	}
 }
