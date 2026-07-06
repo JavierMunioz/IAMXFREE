@@ -160,4 +160,3 @@ func TestQuitFromDetailView(t *testing.T) {
 		t.Fatal("expected quit to work from the detail view too")
 	}
 }
-

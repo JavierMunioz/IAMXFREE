@@ -7,11 +7,15 @@ component.
 
 ## Status
 
-Early scaffolding. The application-registration wizard is implemented and
-persists to the JSON store; the card/panel dashboard and infrastructure
-managers (Nginx, Apache, process supervision, etc.) do not exist yet.
+The main dashboard and the application-registration wizard are implemented;
+infrastructure managers (Nginx, Apache, process supervision, systemd, Docker,
+etc.) do not exist yet — application status shown today comes from the
+stored record, not a live process.
 
-From the running TUI: press `a` to register a new application, `q` to quit.
+From the running TUI:
+- `a` register a new application · `enter` open the selected card's detail view
+- arrows / `tab` / `shift+tab` move the selection · `r` refresh the list
+- `e` / `d` are reserved for edit/delete (not implemented yet) · `q` quit
 
 ## Stack
 
@@ -37,6 +41,7 @@ reshaping existing code:
 | `cmd/iamxfree`                       | Entrypoint binary. Stays thin; delegates to `internal/cli`.                      |
 | `internal/cli`                       | Command/flag parsing (Cobra). Wires repositories/services and starts the TUI.    |
 | `internal/tui`                       | Presentation layer (Bubble Tea/Lipgloss). Renders state, emits intents.          |
+| `internal/tui/dashboard`             | The main screen: card grid of registered applications, top bar, detail view.    |
 | `internal/tui/wizard`                | Generic, feature-agnostic multi-step form engine used by every TUI wizard.       |
 | `internal/tui/wizards/application`   | Composes the wizard engine into the concrete "create application" flow.         |
 | `internal/validation`                | Reusable, composable input validators (Required, Port, Domain, URL, ...).        |
@@ -68,6 +73,27 @@ The wizard never persists anything itself. Whatever hosts it (today,
 `internal/tui`'s `RootModel`) converts its `Result` into a domain draft, then
 calls the relevant service (e.g. `ApplicationService.Register`), which
 validates, checks for conflicts, and persists through the repository layer.
+
+### Dashboard
+
+`internal/tui/dashboard` is the main screen: a top status bar (hostname, OS,
+application count, a live clock — server uptime is a placeholder until a
+future iteration reads it for real), a grid of cards (one per registered
+application, showing name/type/framework/runtime/status/port/domain), and a
+bottom keybinding bar. It is an independent component: it depends only on
+`services.ApplicationService`, never on a repository directly, and holds no
+business logic — loading, sorting and formatting data is all it does.
+
+Selection is never ambiguous: the active card gets both a distinct border
+shape (thick vs. rounded) and an accent color, so it reads correctly even on
+terminals with no color support. Status colors follow the project's
+data-viz palette convention — a small fixed scale (good/warning/critical)
+that always pairs a color with an icon and a label, never color alone.
+Zero registered applications shows a friendly empty state instead of a blank
+grid. Pressing Enter opens a read-only detail view of the selected
+application; `e` (edit) and `d` (delete) are wired up but just report "not
+implemented yet" for now — the keys exist so the experience is already
+defined, even before the behavior behind them is.
 
 `internal/` is used deliberately: nothing here is meant to be imported by
 other Go modules, which keeps the project free to change its internals
