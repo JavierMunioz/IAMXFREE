@@ -9,6 +9,7 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/monitor"
+	"github.com/JavierMunioz/IAMXFREE/internal/repositories"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories/jsonstore"
 	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
 	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost/runtimehosttest"
@@ -21,6 +22,20 @@ func newExecutionServiceWithStrategy(t *testing.T, strategy execution.Strategy) 
 }
 
 func newExecutionServiceWithHost(t *testing.T, strategy execution.Strategy, host runtimehost.Host) (services.ExecutionService, *models.Application) {
+	t.Helper()
+	return newExecutionServiceWithHostAndSessions(t, strategy, host, newSessionRepo(t))
+}
+
+func newSessionRepo(t *testing.T) repositories.SessionRepository {
+	t.Helper()
+	repo, err := jsonstore.NewSessionRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewSessionRepository() error = %v", err)
+	}
+	return repo
+}
+
+func newExecutionServiceWithHostAndSessions(t *testing.T, strategy execution.Strategy, host runtimehost.Host, sessionRepo repositories.SessionRepository) (services.ExecutionService, *models.Application) {
 	t.Helper()
 
 	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
@@ -38,7 +53,7 @@ func newExecutionServiceWithHost(t *testing.T, strategy execution.Strategy, host
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	return services.NewExecutionService(repo, resolver, monitor.New(host)), app
+	return services.NewExecutionService(repo, resolver, monitor.New(host), sessionRepo), app
 }
 
 func TestExecutionServiceStartReturnsRunSession(t *testing.T) {
@@ -354,5 +369,107 @@ func TestExecutionServiceRefreshSessionUpdatesActiveSession(t *testing.T) {
 	}
 	if refreshed.Status != string(execution.StatusStopped) {
 		t.Errorf("Status = %q, want %q", refreshed.Status, execution.StatusStopped)
+	}
+}
+
+func TestExecutionServiceStartPersistsSession(t *testing.T) {
+	sessionRepo := newSessionRepo(t)
+	strategy := &fakeStrategy{
+		runtime:      models.RuntimeNode,
+		startSession: execution.Session{PID: 4242, Status: execution.StatusRunning},
+	}
+	svc, app := newExecutionServiceWithHostAndSessions(t, strategy, runtimehosttest.NewFakeHost(), sessionRepo)
+
+	if _, err := svc.Start(context.Background(), app.ID); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	persisted, err := sessionRepo.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if persisted[app.ID].PID != 4242 {
+		t.Fatalf("persisted session PID = %d, want 4242", persisted[app.ID].PID)
+	}
+}
+
+func TestExecutionServiceStopRemovesPersistedSession(t *testing.T) {
+	sessionRepo := newSessionRepo(t)
+	strategy := &fakeStrategy{
+		runtime:      models.RuntimeNode,
+		startSession: execution.Session{PID: 4242, Status: execution.StatusRunning},
+	}
+	svc, app := newExecutionServiceWithHostAndSessions(t, strategy, runtimehosttest.NewFakeHost(), sessionRepo)
+
+	session, err := svc.Start(context.Background(), app.ID)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := svc.Stop(context.Background(), app.ID, session); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	persisted, err := sessionRepo.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if _, present := persisted[app.ID]; present {
+		t.Fatal("expected the persisted session to be removed after Stop")
+	}
+}
+
+func TestNewExecutionServiceHydratesAStillRunningSessionFromDisk(t *testing.T) {
+	ctx := context.Background()
+	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApplicationRepository() error = %v", err)
+	}
+	resolver := execution.NewResolver(execution.NewRegistry())
+
+	sessionRepo := newSessionRepo(t)
+	if err := sessionRepo.Save(ctx, "app-1", execution.Session{PID: 4242, Status: execution.StatusRunning}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	host := runtimehosttest.NewFakeHost().WithRunningPID(4242, true)
+	svc := services.NewExecutionService(repo, resolver, monitor.New(host), sessionRepo)
+
+	session, ok := svc.ActiveSession("app-1")
+	if !ok {
+		t.Fatal("expected the still-running persisted session to be rehydrated")
+	}
+	if session.PID != 4242 {
+		t.Errorf("PID = %d, want 4242", session.PID)
+	}
+}
+
+func TestNewExecutionServiceDiscardsADeadSessionFromDisk(t *testing.T) {
+	ctx := context.Background()
+	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApplicationRepository() error = %v", err)
+	}
+	resolver := execution.NewResolver(execution.NewRegistry())
+
+	sessionRepo := newSessionRepo(t)
+	if err := sessionRepo.Save(ctx, "app-1", execution.Session{PID: 4242, Status: execution.StatusRunning}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// No WithRunningPID configured — the FakeHost reports 4242 as not
+	// running, simulating a process that exited while IAMXFREE was closed.
+	host := runtimehosttest.NewFakeHost()
+	svc := services.NewExecutionService(repo, resolver, monitor.New(host), sessionRepo)
+
+	if _, ok := svc.ActiveSession("app-1"); ok {
+		t.Fatal("expected a dead session to not be rehydrated")
+	}
+
+	persisted, err := sessionRepo.List(ctx)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if _, present := persisted["app-1"]; present {
+		t.Fatal("expected the dead session to be removed from the repository too")
 	}
 }

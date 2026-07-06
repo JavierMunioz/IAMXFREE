@@ -50,35 +50,70 @@ type ExecutionService interface {
 }
 
 type executionService struct {
-	repo     repositories.ApplicationRepository
-	resolver *execution.Resolver
-	monitor  *monitor.Monitor
+	repo        repositories.ApplicationRepository
+	resolver    *execution.Resolver
+	monitor     *monitor.Monitor
+	sessionRepo repositories.SessionRepository
 
 	mu       sync.Mutex
 	sessions map[string]execution.Session
 }
 
 // NewExecutionService builds the default ExecutionService, backed by repo,
-// resolver and monitor.
-func NewExecutionService(repo repositories.ApplicationRepository, resolver *execution.Resolver, runtimeMonitor *monitor.Monitor) ExecutionService {
-	return &executionService{
-		repo:     repo,
-		resolver: resolver,
-		monitor:  runtimeMonitor,
-		sessions: make(map[string]execution.Session),
+// resolver, monitor and sessionRepo. It immediately rehydrates its
+// in-memory session registry from sessionRepo, keeping only the sessions
+// whose process the Runtime Monitor confirms is still actually alive right
+// now — a one-time check, not periodic polling — and discarding (and
+// un-persisting) the rest. This is what lets ActiveSession still report a
+// session that was started in a previous run of IAMXFREE, as long as its
+// process is still running.
+func NewExecutionService(repo repositories.ApplicationRepository, resolver *execution.Resolver, runtimeMonitor *monitor.Monitor, sessionRepo repositories.SessionRepository) ExecutionService {
+	svc := &executionService{
+		repo:        repo,
+		resolver:    resolver,
+		monitor:     runtimeMonitor,
+		sessionRepo: sessionRepo,
+		sessions:    make(map[string]execution.Session),
+	}
+	svc.hydrateSessions(context.Background())
+	return svc
+}
+
+func (s *executionService) hydrateSessions(ctx context.Context) {
+	persisted, err := s.sessionRepo.List(ctx)
+	if err != nil {
+		return
+	}
+
+	for appID, session := range persisted {
+		snap, err := s.monitor.Snapshot(session)
+		if err != nil || snap.Process.State != monitor.ProcessStateRunning {
+			_ = s.sessionRepo.Delete(ctx, appID)
+			continue
+		}
+		s.sessions[appID] = session
 	}
 }
 
-func (s *executionService) trackSession(appID string, session execution.Session) {
+// trackSession records session as the one currently tracked for appID, both
+// in memory and persisted via sessionRepo. Persisting is best-effort: a
+// failure to write the file doesn't undo the fact that the process is
+// genuinely running — it only means ActiveSession might forget about it if
+// IAMXFREE is restarted before the next successful save.
+func (s *executionService) trackSession(ctx context.Context, appID string, session execution.Session) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.sessions[appID] = session
+	s.mu.Unlock()
+
+	_ = s.sessionRepo.Save(ctx, appID, session)
 }
 
-func (s *executionService) untrackSession(appID string) {
+func (s *executionService) untrackSession(ctx context.Context, appID string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	delete(s.sessions, appID)
+	s.mu.Unlock()
+
+	_ = s.sessionRepo.Delete(ctx, appID)
 }
 
 func (s *executionService) ActiveSession(appID string) (RunSession, bool) {
@@ -106,7 +141,7 @@ func (s *executionService) Start(ctx context.Context, appID string) (RunSession,
 	if err != nil {
 		return RunSession{}, err
 	}
-	s.trackSession(appID, session)
+	s.trackSession(ctx, appID, session)
 	return toRunSession(session), nil
 }
 
@@ -124,7 +159,7 @@ func (s *executionService) Stop(ctx context.Context, appID string, session RunSe
 	if err := strategy.Stop(ctx, app, fromRunSession(session)); err != nil {
 		return err
 	}
-	s.untrackSession(appID)
+	s.untrackSession(ctx, appID)
 	return nil
 }
 
@@ -143,7 +178,7 @@ func (s *executionService) RefreshSession(ctx context.Context, appID string, ses
 	if err != nil {
 		return RunSession{}, err
 	}
-	s.trackSession(appID, updated)
+	s.trackSession(ctx, appID, updated)
 	return toRunSession(updated), nil
 }
 

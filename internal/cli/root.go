@@ -34,6 +34,16 @@ func NewRootCommand() *cobra.Command {
 				return err
 			}
 
+			sessionsDir, err := config.DefaultSessionsDir()
+			if err != nil {
+				return err
+			}
+
+			sessionRepo, err := jsonstore.NewSessionRepository(sessionsDir)
+			if err != nil {
+				return err
+			}
+
 			host := runtimehost.NewLinuxHost()
 
 			executionRegistry := execution.NewRegistry()
@@ -42,7 +52,7 @@ func NewRootCommand() *cobra.Command {
 
 			service := services.NewApplicationService(repo, resolver)
 			runtimeMonitor := monitor.New(host)
-			executionService := services.NewExecutionService(repo, resolver, runtimeMonitor)
+			executionService := services.NewExecutionService(repo, resolver, runtimeMonitor, sessionRepo)
 
 			inspector := inspection.NewInspector(inspection.NewDefaultRegistry())
 			deploymentPlanner := planner.NewDeploymentPlanner(planner.NewDefaultRegistry())
