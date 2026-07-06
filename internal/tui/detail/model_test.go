@@ -49,6 +49,8 @@ type fakeExecutionService struct {
 	refreshErr   error
 	logStream    services.LogStream
 	logsErr      error
+	snapshot     services.RuntimeSnapshot
+	snapshotErr  error
 }
 
 func (f *fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
@@ -62,6 +64,9 @@ func (f *fakeExecutionService) OpenLogs(context.Context, string, services.RunSes
 }
 func (f *fakeExecutionService) RefreshSession(context.Context, string, services.RunSession) (services.RunSession, error) {
 	return f.refreshed, f.refreshErr
+}
+func (f *fakeExecutionService) Snapshot(context.Context, services.RunSession) (services.RuntimeSnapshot, error) {
+	return f.snapshot, f.snapshotErr
 }
 
 func newTestApp() *models.Application {

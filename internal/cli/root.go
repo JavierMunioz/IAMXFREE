@@ -7,6 +7,7 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/config"
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/inspection"
+	"github.com/JavierMunioz/IAMXFREE/internal/monitor"
 	"github.com/JavierMunioz/IAMXFREE/internal/planner"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories/jsonstore"
 	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
@@ -40,7 +41,8 @@ func NewRootCommand() *cobra.Command {
 			resolver := execution.NewResolver(executionRegistry)
 
 			service := services.NewApplicationService(repo, resolver)
-			executionService := services.NewExecutionService(repo, resolver)
+			runtimeMonitor := monitor.New(host)
+			executionService := services.NewExecutionService(repo, resolver, runtimeMonitor)
 
 			inspector := inspection.NewInspector(inspection.NewDefaultRegistry())
 			deploymentPlanner := planner.NewDeploymentPlanner(planner.NewDefaultRegistry())

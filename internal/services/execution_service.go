@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
+	"github.com/JavierMunioz/IAMXFREE/internal/monitor"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories"
 )
 
@@ -28,17 +29,26 @@ type ExecutionService interface {
 	// starts a new process — it attaches to output already being captured
 	// for the session.
 	OpenLogs(ctx context.Context, appID string, session RunSession) (LogStream, error)
+
+	// Snapshot observes session's process right now — its real OS-level
+	// state and resource usage — via the Runtime Monitor. Unlike
+	// Start/Stop/RefreshSession, it never resolves an execution.Strategy:
+	// the Runtime Monitor talks to runtimehost.Host directly, the same way
+	// regardless of which strategy started the process. It is always
+	// on-demand; nothing calls this automatically.
+	Snapshot(ctx context.Context, session RunSession) (RuntimeSnapshot, error)
 }
 
 type executionService struct {
 	repo     repositories.ApplicationRepository
 	resolver *execution.Resolver
+	monitor  *monitor.Monitor
 }
 
-// NewExecutionService builds the default ExecutionService, backed by repo
-// and resolver.
-func NewExecutionService(repo repositories.ApplicationRepository, resolver *execution.Resolver) ExecutionService {
-	return &executionService{repo: repo, resolver: resolver}
+// NewExecutionService builds the default ExecutionService, backed by repo,
+// resolver and monitor.
+func NewExecutionService(repo repositories.ApplicationRepository, resolver *execution.Resolver, runtimeMonitor *monitor.Monitor) ExecutionService {
+	return &executionService{repo: repo, resolver: resolver, monitor: runtimeMonitor}
 }
 
 func (s *executionService) Start(ctx context.Context, appID string) (RunSession, error) {
@@ -107,6 +117,14 @@ func (s *executionService) OpenLogs(ctx context.Context, appID string, session R
 		return nil, err
 	}
 	return newLogStreamAdapter(stream), nil
+}
+
+func (s *executionService) Snapshot(_ context.Context, session RunSession) (RuntimeSnapshot, error) {
+	snap, err := s.monitor.Snapshot(fromRunSession(session))
+	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	return toRuntimeSnapshot(snap), nil
 }
 
 func toRunSession(session execution.Session) RunSession {

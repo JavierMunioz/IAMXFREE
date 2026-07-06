@@ -8,11 +8,19 @@ import (
 
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
+	"github.com/JavierMunioz/IAMXFREE/internal/monitor"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories/jsonstore"
+	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
+	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost/runtimehosttest"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 )
 
 func newExecutionServiceWithStrategy(t *testing.T, strategy execution.Strategy) (services.ExecutionService, *models.Application) {
+	t.Helper()
+	return newExecutionServiceWithHost(t, strategy, runtimehosttest.NewFakeHost())
+}
+
+func newExecutionServiceWithHost(t *testing.T, strategy execution.Strategy, host runtimehost.Host) (services.ExecutionService, *models.Application) {
 	t.Helper()
 
 	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
@@ -30,7 +38,7 @@ func newExecutionServiceWithStrategy(t *testing.T, strategy execution.Strategy) 
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	return services.NewExecutionService(repo, resolver), app
+	return services.NewExecutionService(repo, resolver, monitor.New(host)), app
 }
 
 func TestExecutionServiceStartReturnsRunSession(t *testing.T) {
@@ -199,5 +207,51 @@ func TestExecutionServiceOpenLogsUnknownApplication(t *testing.T) {
 
 	if _, err := svc.OpenLogs(context.Background(), "does-not-exist", services.RunSession{PID: 4242}); err == nil {
 		t.Fatal("expected an error for an unknown application")
+	}
+}
+
+func TestExecutionServiceSnapshotReportsRunningProcess(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().
+		WithRunningPID(4242, true).
+		WithProcessResources(4242, runtimehost.ProcessResources{
+			CPUPercent:      5,
+			CPUPercentKnown: true,
+			MemoryRSSBytes:  64 * 1024 * 1024,
+			MemoryRSSKnown:  true,
+		})
+	svc, _ := newExecutionServiceWithHost(t, &fakeStrategy{runtime: models.RuntimeNode}, host)
+
+	session := services.RunSession{PID: 4242, Command: "npm", WorkingDir: "/srv/apps/my-api"}
+	snap, err := svc.Snapshot(context.Background(), session)
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if snap.State != "running" {
+		t.Errorf("State = %q, want %q", snap.State, "running")
+	}
+	if !snap.CPUPercent.Available || snap.CPUPercent.Value != 5 {
+		t.Errorf("CPUPercent = %+v, want available 5", snap.CPUPercent)
+	}
+	if !snap.MemoryRSSBytes.Available || snap.MemoryRSSBytes.Value != 64*1024*1024 {
+		t.Errorf("MemoryRSSBytes = %+v, want available %d", snap.MemoryRSSBytes, 64*1024*1024)
+	}
+	if snap.MemoryVSZBytes.Available {
+		t.Error("expected MemoryVSZBytes to be unavailable since the host never reported it")
+	}
+	if snap.WorkingDir != "/srv/apps/my-api" {
+		t.Errorf("WorkingDir = %q, want %q", snap.WorkingDir, "/srv/apps/my-api")
+	}
+}
+
+func TestExecutionServiceSnapshotReportsStoppedProcess(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().WithRunningPID(4242, false)
+	svc, _ := newExecutionServiceWithHost(t, &fakeStrategy{runtime: models.RuntimeNode}, host)
+
+	snap, err := svc.Snapshot(context.Background(), services.RunSession{PID: 4242})
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if snap.State != "stopped" {
+		t.Errorf("State = %q, want %q", snap.State, "stopped")
 	}
 }
