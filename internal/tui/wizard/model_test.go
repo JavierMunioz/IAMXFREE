@@ -19,12 +19,12 @@ type fakeStep struct {
 	focusCalls int
 }
 
-func (s *fakeStep) Title() string { return s.title }
-func (s *fakeStep) Focus()        { s.focusCalls++ }
+func (s *fakeStep) Title() string          { return s.title }
+func (s *fakeStep) Focus()                 { s.focusCalls++ }
 func (s *fakeStep) Update(tea.Msg) tea.Cmd { return nil }
-func (s *fakeStep) View() string  { return s.title }
-func (s *fakeStep) Modal() bool   { return s.modal }
-func (s *fakeStep) Value() string { return s.value }
+func (s *fakeStep) View() string           { return s.title }
+func (s *fakeStep) Modal() bool            { return s.modal }
+func (s *fakeStep) Value() string          { return s.value }
 
 func (s *fakeStep) Validate() error {
 	if s.invalid {
