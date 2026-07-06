@@ -48,6 +48,7 @@ reshaping existing code:
 | `internal/core`                      | Orchestrates services/managers/repositories for each use case.                  |
 | `internal/execution`                 | Technology-agnostic contract for installing/building/running an application.    |
 | `internal/inspection`                | Reads a directory and detects what kind of project lives there. Read-only.      |
+| `internal/planner`                   | Turns an inspection.Result into a proposed IAMXFREE configuration.              |
 | `internal/managers`                  | Concrete resource managers: processes, Nginx, Apache, env files, etc.           |
 | `internal/services`                  | Business logic coordinating managers + repositories (e.g. ApplicationService).  |
 | `internal/models`                    | Domain entities (Application, ApplicationDraft, ...).                           |
@@ -147,6 +148,47 @@ shape as the execution engine, applied to detection instead of running:
 
 Not integrated anywhere yet — the application-registration wizard is meant
 to use this to autocomplete its fields, but that wiring is a later iteration.
+
+### Deployment Planner
+
+`internal/planner` turns an `inspection.Result` into a `DeploymentPlan` — a
+proposed configuration (suggested name, application type, framework,
+runtime, package manager, suggested port, install/build/start commands,
+matched files, detected dependencies, a confidence level, warnings and
+notes). The Inspector detects; the Planner interprets; neither one runs a
+command, writes a file, or persists anything. It depends only on
+`internal/models` and `internal/inspection` — never on the TUI, the wizard,
+the dashboard, or the execution engine.
+
+Same three-piece shape again:
+
+- **`Planner`** — one per technology (`node_planner.go` is the only one
+  implemented so far; `python_planner.go`, `go_planner.go`, `docker_planner.go`
+  etc. will follow the same pattern). `CanPlan(detection)` decides whether it
+  applies; `Plan(detection, result)` builds the proposal. It never fails —
+  anything it cannot confidently determine is left blank with a matching
+  entry in `Warnings` explaining why, never guessed.
+- **`Registry`** — where planners register themselves; adding a technology
+  never means changing existing code. `NewDefaultRegistry()` currently
+  registers just the Node planner.
+- **`DeploymentPlanner`** — takes a full `inspection.Result`, picks its
+  `Primary()` detection to drive the proposal, and delegates to whichever
+  registered `Planner.CanPlan` matches. It always returns a `DeploymentPlan`,
+  even when nothing was detected or no planner matches yet — the plan's
+  `Warnings` say why instead of the call failing.
+
+The Node planner reuses the Node detector's own install/build/start
+suggestions (the detector already knows never to invent a script package.json
+doesn't have) and adds proposal-level interpretation the detector doesn't do:
+classifying `models.ApplicationType` (only for frameworks it's confident
+about — React/Vue/Angular/Svelte → frontend, Express/NestJS → backend; hybrid
+meta-frameworks like Next.js/Nuxt/Astro are deliberately left unclassified),
+inferring a port from the `"start"` script's `--port`/`-p`/`PORT=` flag when
+present, noting a sibling Docker/Compose detection, and downgrading its own
+`Confidence` by one step whenever it had to raise a warning.
+
+Not integrated with the Wizard yet — that is the next iteration, once the
+Planner has been validated in isolation.
 
 `internal/` is used deliberately: nothing here is meant to be imported by
 other Go modules, which keeps the project free to change its internals
