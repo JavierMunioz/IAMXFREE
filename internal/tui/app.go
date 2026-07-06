@@ -8,41 +8,18 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizards/application"
-)
-
-var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#7D56F4")).
-			Padding(0, 1)
-
-	subtitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888")).
-			Padding(0, 1)
-
-	hintStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#555555")).
-			Padding(1, 1, 0)
-
-	statusStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#4CAF50")).
-			Padding(0, 1)
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#E45858")).
-			Padding(0, 1)
 )
 
 type screen int
 
 const (
-	screenSplash screen = iota
+	screenDashboard screen = iota
 	screenWizard
 )
 
@@ -60,73 +37,63 @@ type applicationRegistrationFailedMsg struct {
 }
 
 // RootModel is the top-level Bubble Tea model. It owns which screen is
-// active (today: the splash screen or the create-application wizard) and
-// delegates the actual persistence decision to services.ApplicationService.
+// active — the dashboard or the create-application wizard — and delegates
+// the actual persistence decision to services.ApplicationService.
 type RootModel struct {
 	service services.ApplicationService
 
-	screen screen
-	wizard wizard.Model
-
-	status    string
-	statusErr error
-
-	quitting bool
+	screen    screen
+	dashboard dashboard.Model
+	wizard    wizard.Model
 }
 
 // NewRootModel builds the initial application model.
 func NewRootModel(service services.ApplicationService) RootModel {
-	return RootModel{service: service, screen: screenSplash}
+	return RootModel{
+		service:   service,
+		screen:    screenDashboard,
+		dashboard: dashboard.New(service),
+	}
 }
 
 func (m RootModel) Init() tea.Cmd {
-	return nil
+	return m.dashboard.Init()
 }
 
 func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case wizard.CompletedMsg:
-		m.screen = screenSplash
-		m.status = ""
-		m.statusErr = nil
+		m.screen = screenDashboard
 
 		draft, err := application.DraftFromResult(msg.Result)
 		if err != nil {
-			m.statusErr = err
+			m.dashboard = m.dashboard.SetError(err)
 			return m, nil
 		}
 		return m, m.registerCmd(draft.ToApplication())
 
 	case wizard.CancelledMsg:
-		m.screen = screenSplash
-		m.status = "Registration cancelled."
-		m.statusErr = nil
+		m.screen = screenDashboard
+		m.dashboard = m.dashboard.SetStatus("Registration cancelled.")
 		return m, nil
+
+	case dashboard.OpenWizardMsg:
+		m.screen = screenWizard
+		m.wizard = wizard.New("New application", application.Steps())
+		return m, m.wizard.Init()
 
 	case applicationRegisteredMsg:
-		m.status = fmt.Sprintf("Application %q registered.", msg.app.Name)
-		m.statusErr = nil
-		return m, nil
+		m.dashboard = m.dashboard.SetStatus(fmt.Sprintf("Application %q registered.", msg.app.Name))
+		return m, m.dashboard.Reload()
 
 	case applicationRegistrationFailedMsg:
-		m.statusErr = msg.err
+		m.dashboard = m.dashboard.SetError(msg.err)
 		return m, nil
 
-	case tea.KeyMsg:
-		if m.screen == screenSplash {
-			switch msg.String() {
-			case "q", "ctrl+c":
-				m.quitting = true
-				return m, tea.Quit
-			case "a":
-				m.screen = screenWizard
-				m.wizard = wizard.New("New application", application.Steps())
-				m.status = ""
-				m.statusErr = nil
-				return m, m.wizard.Init()
-			}
-			return m, nil
-		}
+	case tea.WindowSizeMsg:
+		updated, cmd := m.dashboard.Update(msg)
+		m.dashboard = updated.(dashboard.Model)
+		return m, cmd
 	}
 
 	if m.screen == screenWizard {
@@ -135,7 +102,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	return m, nil
+	updated, cmd := m.dashboard.Update(msg)
+	m.dashboard = updated.(dashboard.Model)
+	return m, cmd
 }
 
 func (m RootModel) registerCmd(app *models.Application) tea.Cmd {
@@ -149,29 +118,10 @@ func (m RootModel) registerCmd(app *models.Application) tea.Cmd {
 }
 
 func (m RootModel) View() string {
-	if m.quitting {
-		return ""
-	}
-
 	if m.screen == screenWizard {
 		return m.wizard.View()
 	}
-
-	body := fmt.Sprintf(
-		"%s\n%s\n%s",
-		titleStyle.Render("IAMXFREE"),
-		subtitleStyle.Render("VPS application manager"),
-		hintStyle.Render("a: new application  ·  q: quit"),
-	)
-
-	switch {
-	case m.statusErr != nil:
-		body += "\n" + errorStyle.Render(m.statusErr.Error())
-	case m.status != "":
-		body += "\n" + statusStyle.Render(m.status)
-	}
-
-	return body + "\n"
+	return m.dashboard.View()
 }
 
 // Run starts the Bubble Tea program using the terminal's real stdin/stdout.

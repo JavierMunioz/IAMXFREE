@@ -3,11 +3,13 @@ package tui
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizards/application"
 )
@@ -49,9 +51,21 @@ func validResult() wizard.Result {
 func TestRootModelPressingAOpensWizard(t *testing.T) {
 	m := NewRootModel(&fakeApplicationService{})
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	// "a" is handled by the dashboard, which asks the root model to open
+	// the wizard via a command rather than switching screens itself.
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	m = updated.(RootModel)
+	if cmd == nil {
+		t.Fatal("expected a command requesting the wizard to open")
+	}
 
+	msg, ok := cmd().(dashboard.OpenWizardMsg)
+	if !ok {
+		t.Fatalf("expected dashboard.OpenWizardMsg, got %T", cmd())
+	}
+
+	updated, _ = m.Update(msg)
+	m = updated.(RootModel)
 	if m.screen != screenWizard {
 		t.Fatalf("screen = %v, want screenWizard", m.screen)
 	}
@@ -66,18 +80,18 @@ func TestRootModelQuits(t *testing.T) {
 	}
 }
 
-func TestRootModelCancelledWizardReturnsToSplash(t *testing.T) {
+func TestRootModelCancelledWizardReturnsToDashboard(t *testing.T) {
 	m := NewRootModel(&fakeApplicationService{})
 	m.screen = screenWizard
 
 	updated, _ := m.Update(wizard.CancelledMsg{})
 	m = updated.(RootModel)
 
-	if m.screen != screenSplash {
-		t.Fatalf("screen = %v, want screenSplash", m.screen)
+	if m.screen != screenDashboard {
+		t.Fatalf("screen = %v, want screenDashboard", m.screen)
 	}
-	if m.status == "" {
-		t.Fatal("expected a status message after cancelling")
+	if !strings.Contains(m.dashboard.View(), "cancelled") {
+		t.Fatal("expected the dashboard to show a cancellation status message")
 	}
 }
 
@@ -88,8 +102,8 @@ func TestRootModelCompletedWizardRegistersApplication(t *testing.T) {
 	updated, cmd := m.Update(wizard.CompletedMsg{Result: validResult()})
 	m = updated.(RootModel)
 
-	if m.screen != screenSplash {
-		t.Fatalf("screen = %v, want screenSplash", m.screen)
+	if m.screen != screenDashboard {
+		t.Fatalf("screen = %v, want screenDashboard", m.screen)
 	}
 	if cmd == nil {
 		t.Fatal("expected a registration command")
@@ -106,8 +120,8 @@ func TestRootModelCompletedWizardRegistersApplication(t *testing.T) {
 
 	updated, _ = m.Update(registered)
 	m = updated.(RootModel)
-	if m.status == "" {
-		t.Fatal("expected a success status message")
+	if !strings.Contains(m.dashboard.View(), `"my-api" registered`) {
+		t.Fatal("expected the dashboard to show a success status message")
 	}
 }
 
@@ -127,7 +141,7 @@ func TestRootModelRegistrationFailureShowsError(t *testing.T) {
 
 	updated, _ = m.Update(failed)
 	m = updated.(RootModel)
-	if m.statusErr == nil {
-		t.Fatal("expected statusErr to be set")
+	if !strings.Contains(m.dashboard.View(), wantErr.Error()) {
+		t.Fatal("expected the dashboard to show the registration error")
 	}
 }
