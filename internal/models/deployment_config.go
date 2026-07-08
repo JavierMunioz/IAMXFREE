@@ -29,4 +29,10 @@ type DeploymentConfig struct {
 	// means no hook — never invented, only run when configured.
 	PreDeployHook  string `json:"pre_deploy_hook,omitempty"`
 	PostDeployHook string `json:"post_deploy_hook,omitempty"`
+
+	// Strategy chooses how a deployment brings the new version up. Blank
+	// behaves as DeploymentStrategyStandard — deployment.Engine does not
+	// yet branch on this field; it exists so the wizard and a future
+	// zero-downtime implementation have a place to read/write it.
+	Strategy DeploymentStrategy `json:"strategy,omitempty"`
 }
