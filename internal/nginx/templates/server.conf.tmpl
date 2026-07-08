@@ -1,0 +1,7 @@
+server {
+    listen {{.Listen}};
+    server_name {{.ServerName}}{{range .ServerAliases}} {{.}}{{end}};
+{{range .Locations}}
+{{renderLocation .}}
+{{end -}}
+}
