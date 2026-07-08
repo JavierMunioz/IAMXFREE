@@ -9,7 +9,10 @@ import (
 
 // stopOperation stops the application's currently tracked session, if any.
 // It is only applicable when one is running — there is nothing to stop
-// otherwise, and calling Stop with no session would be meaningless.
+// otherwise, and calling Stop with no session would be meaningless. It
+// compensates with Start: if a later operation fails, the application is
+// put back in the running state it was in before this deployment touched
+// it.
 func (e *Engine) stopOperation(app *models.Application) operations.Operation {
 	op := operations.Operation{Name: "Stop application", Component: string(ComponentExecution), Method: "Stop"}
 
@@ -22,6 +25,10 @@ func (e *Engine) stopOperation(app *models.Application) operations.Operation {
 	op.Applicable = true
 	op.Run = func(ctx context.Context) error {
 		return e.executionService.Stop(ctx, app.ID, session)
+	}
+	op.Compensate = func(ctx context.Context) error {
+		_, err := e.executionService.Start(ctx, app.ID)
+		return err
 	}
 	return op
 }

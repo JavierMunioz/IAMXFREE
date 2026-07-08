@@ -49,6 +49,7 @@ type fakeExecutionService struct {
 	buildFn    func(ctx context.Context, appID string) error
 	buildErr   error
 
+	startFn      func(ctx context.Context, appID string) (services.RunSession, error)
 	startSession services.RunSession
 	startErr     error
 	stopErr      error
@@ -67,7 +68,10 @@ func (f *fakeExecutionService) Build(ctx context.Context, appID string) error {
 	}
 	return f.buildErr
 }
-func (f *fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
+func (f *fakeExecutionService) Start(ctx context.Context, appID string) (services.RunSession, error) {
+	if f.startFn != nil {
+		return f.startFn(ctx, appID)
+	}
 	return f.startSession, f.startErr
 }
 func (f *fakeExecutionService) Stop(_ context.Context, _ string, session services.RunSession) error {

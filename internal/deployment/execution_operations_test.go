@@ -45,6 +45,40 @@ func TestStopOperationRunPropagatesError(t *testing.T) {
 	}
 }
 
+func TestStopOperationCompensatesWithStart(t *testing.T) {
+	var startedWith string
+	exec := &fakeExecutionService{
+		running: true, session: services.RunSession{PID: 4242},
+		startFn: func(_ context.Context, appID string) (services.RunSession, error) {
+			startedWith = appID
+			return services.RunSession{}, nil
+		},
+	}
+	engine := &Engine{executionService: exec}
+	app := &models.Application{ID: "app-1"}
+
+	op := engine.stopOperation(app)
+	if op.Compensate == nil {
+		t.Fatal("expected Stop to have a Compensate")
+	}
+	if err := op.Compensate(context.Background()); err != nil {
+		t.Fatalf("Compensate() error = %v", err)
+	}
+	if startedWith != "app-1" {
+		t.Errorf("Compensate called Start with %q, want %q", startedWith, "app-1")
+	}
+}
+
+func TestStopOperationCompensatePropagatesStartError(t *testing.T) {
+	engine := &Engine{executionService: &fakeExecutionService{running: true, startErr: errBoom}}
+	app := &models.Application{ID: "app-1"}
+
+	op := engine.stopOperation(app)
+	if err := op.Compensate(context.Background()); err == nil {
+		t.Fatal("expected Compensate to propagate the start error")
+	}
+}
+
 func TestStartOperationAlwaysApplicable(t *testing.T) {
 	engine := &Engine{executionService: &fakeExecutionService{}}
 	app := &models.Application{ID: "app-1"}
