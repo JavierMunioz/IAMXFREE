@@ -42,6 +42,7 @@ type fakeStrategy struct {
 
 	startSession  execution.Session
 	startErr      error
+	startedPort   int
 	stopErr       error
 	statusSession execution.Session
 	statusErr     error
@@ -65,7 +66,8 @@ func (s *fakeStrategy) Install(context.Context, *models.Application) error {
 func (s *fakeStrategy) Build(context.Context, *models.Application) error {
 	return s.buildErr
 }
-func (s *fakeStrategy) Start(context.Context, *models.Application, int) (execution.Session, error) {
+func (s *fakeStrategy) Start(_ context.Context, _ *models.Application, port int) (execution.Session, error) {
+	s.startedPort = port
 	return s.startSession, s.startErr
 }
 func (s *fakeStrategy) Stop(context.Context, *models.Application, execution.Session) error {

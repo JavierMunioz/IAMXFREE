@@ -18,4 +18,5 @@ type RunSession struct {
 	WorkingDir string
 	Status     string
 	Runtime    models.Runtime
+	Port       int
 }

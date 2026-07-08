@@ -290,6 +290,7 @@ func toRunSession(session execution.Session) RunSession {
 		WorkingDir: session.WorkingDir,
 		Status:     string(session.Status),
 		Runtime:    session.Runtime,
+		Port:       session.Port,
 	}
 }
 
@@ -302,5 +303,6 @@ func fromRunSession(rs RunSession) execution.Session {
 		WorkingDir: rs.WorkingDir,
 		Status:     execution.Status(rs.Status),
 		Runtime:    rs.Runtime,
+		Port:       rs.Port,
 	}
 }

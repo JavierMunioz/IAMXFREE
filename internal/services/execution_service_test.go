@@ -136,6 +136,41 @@ func TestExecutionServiceStartReturnsRunSession(t *testing.T) {
 	}
 }
 
+func TestExecutionServiceStartPassesConfiguredInternalPort(t *testing.T) {
+	strategy := &fakeStrategy{
+		runtime:      models.RuntimeNode,
+		startSession: execution.Session{PID: 4242, Status: execution.StatusRunning, Port: 3000},
+	}
+
+	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApplicationRepository() error = %v", err)
+	}
+	registry := execution.NewRegistry()
+	registry.Register(strategy)
+	resolver := execution.NewResolver(registry)
+
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Runtime = models.RuntimeNode
+	app.Config.InternalPort = 3000
+	if err := repo.Create(context.Background(), app); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	svc := services.NewExecutionService(repo, resolver, monitor.New(runtimehosttest.NewFakeHost()), newSessionRepo(t))
+
+	session, err := svc.Start(context.Background(), app.ID)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if strategy.startedPort != 3000 {
+		t.Errorf("strategy.Start called with port %d, want 3000 (app.Config.InternalPort)", strategy.startedPort)
+	}
+	if session.Port != 3000 {
+		t.Errorf("RunSession.Port = %d, want 3000", session.Port)
+	}
+}
+
 func TestExecutionServiceStartPropagatesStrategyError(t *testing.T) {
 	wantErr := errors.New("not ready")
 	strategy := &fakeStrategy{runtime: models.RuntimeNode, startErr: wantErr}
