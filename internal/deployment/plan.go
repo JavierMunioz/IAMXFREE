@@ -23,6 +23,8 @@ func (e *Engine) Plan(ctx context.Context, appID string) (DeploymentPlan, error)
 
 	var steps []DeploymentStep
 
+	steps = append(steps, preDeployHookStep(app))
+
 	gitVerifySteps, repo := e.gitSteps(ctx, app)
 	steps = append(steps, gitVerifySteps...)
 	if repo.IsRepo {
@@ -32,6 +34,7 @@ func (e *Engine) Plan(ctx context.Context, appID string) (DeploymentPlan, error)
 	steps = append(steps, buildSteps(app)...)
 	steps = append(steps, e.executionSteps(app)...)
 	steps = append(steps, e.nginxSteps(ctx, app)...)
+	steps = append(steps, postDeployHookStep(app))
 
 	plan := DeploymentPlan{
 		ApplicationID:   app.ID,

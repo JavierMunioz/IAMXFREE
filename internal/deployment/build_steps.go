@@ -11,17 +11,17 @@ import (
 // DeploymentConfig — no execution, just reporting what's configured.
 func buildSteps(app *models.Application) []DeploymentStep {
 	return []DeploymentStep{
-		commandStep("Install dependencies", OperationInstallDependencies, app.Config.InstallCommand, "no install command configured"),
-		commandStep("Build application", OperationBuild, app.Config.BuildCommand, "no build command configured"),
+		commandStep(ComponentExecution, "Install dependencies", OperationInstallDependencies, app.Config.InstallCommand, "no install command configured"),
+		commandStep(ComponentExecution, "Build application", OperationBuild, app.Config.BuildCommand, "no build command configured"),
 	}
 }
 
 // commandStep builds a step for a configured shell command: Skipped when
 // command is empty, Ready describing what it would run otherwise.
-func commandStep(name string, operation DeploymentOperation, command string, skippedReason string) DeploymentStep {
+func commandStep(component DeploymentComponent, name string, operation DeploymentOperation, command string, skippedReason string) DeploymentStep {
 	step := DeploymentStep{
 		Name:      name,
-		Component: ComponentExecution,
+		Component: component,
 		Operation: operation,
 		Required:  command != "",
 	}

@@ -61,10 +61,11 @@ func TestPlanReadyDeployment(t *testing.T) {
 	if plan.Summary.BlockedSteps != 0 {
 		t.Errorf("BlockedSteps = %d, want 0", plan.Summary.BlockedSteps)
 	}
-	// verify repo + local changes + pull(skipped) + install + build +
-	// check running + restart + verify nginx + reload(skipped) = 9
-	if plan.Summary.TotalSteps != 9 {
-		t.Errorf("TotalSteps = %d, want 9, steps = %+v", plan.Summary.TotalSteps, plan.Steps)
+	// pre-deploy hook(skipped) + verify repo + local changes + pull(skipped)
+	// + install + build + check running + restart + verify nginx +
+	// reload(skipped) + post-deploy hook(skipped) = 11
+	if plan.Summary.TotalSteps != 11 {
+		t.Errorf("TotalSteps = %d, want 11, steps = %+v", plan.Summary.TotalSteps, plan.Steps)
 	}
 }
 
