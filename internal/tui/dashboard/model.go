@@ -48,6 +48,14 @@ type sessionsLoadedMsg struct {
 	sessionByID map[string]services.RunSession
 }
 
+// gitLoadedMsg carries Git status, keyed by application ID, for every
+// currently loaded application. An application missing from the map (or
+// present with IsRepo == false) simply has no repository to show — that's
+// not an error.
+type gitLoadedMsg struct {
+	gitByID map[string]services.GitStatus
+}
+
 type tickMsg time.Time
 
 // Model is the dashboard screen. It depends only on services.ApplicationService
@@ -60,6 +68,7 @@ type Model struct {
 	apps        []*models.Application
 	healthByID  map[string]services.ExecutionHealth
 	sessionByID map[string]services.RunSession
+	gitByID     map[string]services.GitStatus
 	selected    int
 
 	width  int
@@ -135,6 +144,25 @@ func (m Model) loadSessionsCmd() tea.Cmd {
 	}
 }
 
+// loadGitCmd fetches Git status for every currently loaded application. It
+// is enrichment, not core data: an application whose status could not be
+// determined (no strategy — err from CheckGitStatus — or simply no repo)
+// is left out of the result rather than failing the whole batch.
+func (m Model) loadGitCmd() tea.Cmd {
+	service := m.service
+	apps := m.apps
+	return func() tea.Msg {
+		gitByID := make(map[string]services.GitStatus, len(apps))
+		for _, app := range apps {
+			status, err := service.CheckGitStatus(context.Background(), app.ID)
+			if err == nil {
+				gitByID[app.ID] = status
+			}
+		}
+		return gitLoadedMsg{gitByID: gitByID}
+	}
+}
+
 func tickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
@@ -182,7 +210,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !wasLoading {
 			m = m.SetStatus("Refreshed.")
 		}
-		return m, tea.Batch(m.loadHealthCmd(), m.loadSessionsCmd())
+		return m, tea.Batch(m.loadHealthCmd(), m.loadSessionsCmd(), m.loadGitCmd())
 
 	case appsLoadFailedMsg:
 		m.loading = false
@@ -196,6 +224,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sessionsLoadedMsg:
 		m.sessionByID = msg.sessionByID
+		return m, nil
+
+	case gitLoadedMsg:
+		m.gitByID = msg.gitByID
 		return m, nil
 
 	case tea.KeyMsg:

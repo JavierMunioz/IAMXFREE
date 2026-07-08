@@ -283,6 +283,37 @@ func TestSessionsLoadedMsgUpdatesModel(t *testing.T) {
 	}
 }
 
+func TestLoadGitCmdIncludesRepoStatus(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	svc := &fakeService{git: map[string]services.GitStatus{
+		app.ID: {IsRepo: true, Branch: "main"},
+	}}
+	m := New(svc, &fakeExecutionService{})
+	m.apps = []*models.Application{app}
+
+	msg := m.loadGitCmd()()
+	loaded, ok := msg.(gitLoadedMsg)
+	if !ok {
+		t.Fatalf("expected gitLoadedMsg, got %T", msg)
+	}
+	if !loaded.gitByID[app.ID].IsRepo {
+		t.Fatalf("gitByID[%s] = %+v, want IsRepo = true", app.ID, loaded.gitByID[app.ID])
+	}
+}
+
+func TestGitLoadedMsgUpdatesModel(t *testing.T) {
+	m := New(&fakeService{}, &fakeExecutionService{})
+
+	updated, _ := m.Update(gitLoadedMsg{gitByID: map[string]services.GitStatus{
+		"app-1": {IsRepo: true, Branch: "main"},
+	}})
+	m = updated.(Model)
+
+	if !m.gitByID["app-1"].IsRepo {
+		t.Fatalf("gitByID = %+v, want an entry for app-1", m.gitByID)
+	}
+}
+
 func TestTickReschedulesItself(t *testing.T) {
 	m := New(&fakeService{}, &fakeExecutionService{})
 	_, cmd := m.Update(tickMsg(time.Now()))

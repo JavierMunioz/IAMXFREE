@@ -161,3 +161,35 @@ func TestRenderCardOmitsSessionLineWhenNoneTracked(t *testing.T) {
 		t.Errorf("expected no PID line without a tracked session, got:\n%s", card)
 	}
 }
+
+func TestRenderCardShowsGitOK(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	m := New(&fakeService{}, &fakeExecutionService{})
+	m.gitByID = map[string]services.GitStatus{app.ID: {IsRepo: true, Branch: "main"}}
+
+	card := stripANSI(t, m.renderCard(app, false))
+	if !strings.Contains(card, "Git ✓") {
+		t.Errorf("card missing Git ✓ line:\n%s", card)
+	}
+}
+
+func TestRenderCardShowsGitMissing(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	m := New(&fakeService{}, &fakeExecutionService{})
+	m.gitByID = map[string]services.GitStatus{app.ID: {IsRepo: false}}
+
+	card := stripANSI(t, m.renderCard(app, false))
+	if !strings.Contains(card, "Git ✗") {
+		t.Errorf("card missing Git ✗ line:\n%s", card)
+	}
+}
+
+func TestRenderCardOmitsGitLineWhenNotLoaded(t *testing.T) {
+	app := newApp("my-api", time.Now())
+	m := New(&fakeService{}, &fakeExecutionService{}) // no git status configured
+
+	card := stripANSI(t, m.renderCard(app, false))
+	if strings.Contains(card, "Git") {
+		t.Errorf("expected no Git line before status is loaded, got:\n%s", card)
+	}
+}

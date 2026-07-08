@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
+	"github.com/JavierMunioz/IAMXFREE/internal/services"
 )
 
 // renderGrid lays out every application as a card, wrapping into rows of
@@ -64,6 +65,10 @@ func (m Model) renderCard(app *models.Application, selected bool) string {
 		)))
 	}
 
+	if git, ok := m.gitByID[app.ID]; ok {
+		lines = append(lines, renderGitLine(git))
+	}
+
 	return style.Width(cardWidth).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
@@ -73,6 +78,16 @@ func (m Model) renderCard(app *models.Application, selected bool) string {
 // without any new polling of the operating system.
 func formatUptime(startedAt time.Time) string {
 	return time.Since(startedAt).Round(time.Second).String()
+}
+
+// renderGitLine shows only whether the application has a valid Git
+// repository — "Git ✓" or "Git ✗" — never details. The detail view is
+// where branch, commit, working tree state and remote are shown.
+func renderGitLine(status services.GitStatus) string {
+	if status.IsRepo {
+		return lipgloss.NewStyle().Foreground(colorGood).Render("Git ✓")
+	}
+	return mutedStyle.Render("Git ✗")
 }
 
 // renderHealthLine shows execution health with both an icon and a label —
