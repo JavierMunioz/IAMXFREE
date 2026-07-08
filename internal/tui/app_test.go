@@ -16,6 +16,7 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost/runtimehosttest"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/deploymentexec"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/deploymentplan"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/detail"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/logs"
@@ -270,6 +271,33 @@ func TestRootModelDeploymentPlanBackMsgReturnsToDetail(t *testing.T) {
 	m = updated.(RootModel)
 	if m.screen != screenDetail {
 		t.Fatalf("screen = %v, want screenDetail", m.screen)
+	}
+}
+
+func TestRootModelExecutePlanMsgSwitchesToDeploymentExecScreen(t *testing.T) {
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
+	m.screen = screenDeploymentPlan
+
+	updated, cmd := m.Update(deploymentplan.ExecutePlanMsg{Plan: deployment.DeploymentPlan{ApplicationID: app.ID}})
+	m = updated.(RootModel)
+	if m.screen != screenDeploymentExec {
+		t.Fatalf("screen = %v, want screenDeploymentExec", m.screen)
+	}
+	if cmd == nil {
+		t.Fatal("expected opening the execution screen to return its Init command")
+	}
+}
+
+func TestRootModelDeploymentExecBackMsgReturnsToDeploymentPlan(t *testing.T) {
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
+	m.screen = screenDeploymentExec
+
+	updated, _ := m.Update(deploymentexec.BackMsg{})
+	m = updated.(RootModel)
+	if m.screen != screenDeploymentPlan {
+		t.Fatalf("screen = %v, want screenDeploymentPlan", m.screen)
 	}
 }
 

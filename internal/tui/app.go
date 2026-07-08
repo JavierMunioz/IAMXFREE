@@ -13,6 +13,7 @@ import (
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/deploymentexec"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/deploymentplan"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/detail"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/logs"
@@ -28,6 +29,7 @@ const (
 	screenDetail
 	screenLogs
 	screenDeploymentPlan
+	screenDeploymentExec
 )
 
 // applicationRegisteredMsg is emitted once ApplicationService.Register
@@ -59,6 +61,7 @@ type RootModel struct {
 	detail         detail.Model
 	logs           logs.Model
 	deploymentPlan deploymentplan.Model
+	deploymentExec deploymentexec.Model
 }
 
 // NewRootModel builds the initial application model.
@@ -126,6 +129,15 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.screen = screenDetail
 		return m, nil
 
+	case deploymentplan.ExecutePlanMsg:
+		m.screen = screenDeploymentExec
+		m.deploymentExec = deploymentexec.New(m.deploymentEngine, msg.Plan)
+		return m, m.deploymentExec.Init()
+
+	case deploymentexec.BackMsg:
+		m.screen = screenDeploymentPlan
+		return m, nil
+
 	case applicationRegisteredMsg:
 		m.dashboard = m.dashboard.SetStatus(fmt.Sprintf("Application %q registered.", msg.app.Name))
 		return m, m.dashboard.Reload()
@@ -160,6 +172,11 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.deploymentPlan.Update(msg)
 		m.deploymentPlan = updated.(deploymentplan.Model)
 		return m, cmd
+
+	case screenDeploymentExec:
+		updated, cmd := m.deploymentExec.Update(msg)
+		m.deploymentExec = updated.(deploymentexec.Model)
+		return m, cmd
 	}
 
 	updated, cmd := m.dashboard.Update(msg)
@@ -187,6 +204,8 @@ func (m RootModel) View() string {
 		return m.logs.View()
 	case screenDeploymentPlan:
 		return m.deploymentPlan.View()
+	case screenDeploymentExec:
+		return m.deploymentExec.View()
 	}
 	return m.dashboard.View()
 }
