@@ -23,6 +23,8 @@ func TestStepsOrderAndKeys(t *testing.T) {
 		application.KeyPort,
 		application.KeyDomain,
 		application.KeyRepoURL,
+		application.KeyPreDeployHook,
+		application.KeyPostDeployHook,
 		"confirm",
 	}
 

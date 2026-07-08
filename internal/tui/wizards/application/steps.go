@@ -24,6 +24,8 @@ const (
 	KeyPort           = "port"
 	KeyDomain         = "domain"
 	KeyRepoURL        = "repo_url"
+	KeyPreDeployHook  = "pre_deploy_hook"
+	KeyPostDeployHook = "post_deploy_hook"
 )
 
 var typeChoices = []wizard.Choice{
@@ -116,12 +118,16 @@ func Steps(setup services.ApplicationSetupService) []wizard.StepDef {
 	repoURL := wizard.NewTextStep("Repository", "Git repository URL (optional):", "https://github.com/user/repo.git",
 		validation.Optional(validation.GitRepository()))
 
+	preDeployHook := wizard.NewTextStep("Pre-Deploy Hook", "Pre-deploy hook command (optional):", "curl -X POST https://...", nil)
+	postDeployHook := wizard.NewTextStep("Post-Deploy Hook", "Post-deploy hook command (optional):", "curl -X POST https://...", nil)
+
 	summary := wizard.NewSummaryStep("Summary", func() string {
 		return fmt.Sprintf(
-			"Name:            %s\nType:            %s\nFramework:       %s\nRuntime:         %s\nPackage manager: %s\nPath:            %s\nPort:            %s\nDomain:          %s\nRepository:      %s\nInstall:         %s\nBuild:           %s\nStart:           %s",
+			"Name:            %s\nType:            %s\nFramework:       %s\nRuntime:         %s\nPackage manager: %s\nPath:            %s\nPort:            %s\nDomain:          %s\nRepository:      %s\nInstall:         %s\nBuild:           %s\nStart:           %s\nPre-Deploy Hook: %s\nPost-Deploy Hook:%s",
 			name.Value(), appType.Value(), framework.Value(), runtime.Value(), valueOrDash(packageManager.Value()),
 			path.Value(), port.Value(), valueOrDash(domain.Value()), valueOrDash(repoURL.Value()),
 			valueOrDash(installCommand.Value()), valueOrDash(buildCommand.Value()), valueOrDash(startCommand.Value()),
+			valueOrDash(preDeployHook.Value()), valueOrDash(postDeployHook.Value()),
 		)
 	})
 
@@ -139,6 +145,8 @@ func Steps(setup services.ApplicationSetupService) []wizard.StepDef {
 		{Key: KeyPort, Step: port},
 		{Key: KeyDomain, Step: domain},
 		{Key: KeyRepoURL, Step: repoURL},
+		{Key: KeyPreDeployHook, Step: preDeployHook},
+		{Key: KeyPostDeployHook, Step: postDeployHook},
 		{Key: "confirm", Step: summary},
 	}
 }

@@ -30,5 +30,7 @@ func DraftFromResult(result wizard.Result) (models.ApplicationDraft, error) {
 		InstallCommand: result.Get(KeyInstallCommand),
 		BuildCommand:   result.Get(KeyBuildCommand),
 		StartCommand:   result.Get(KeyStartCommand),
+		PreDeployHook:  result.Get(KeyPreDeployHook),
+		PostDeployHook: result.Get(KeyPostDeployHook),
 	}, nil
 }

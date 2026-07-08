@@ -123,9 +123,19 @@ func TestFullApplicationWizardFlowPreFillsFromAnalysis(t *testing.T) {
 		t.Fatal("did not expect completion yet (domain)")
 	}
 
-	m, cmd = pressEnter(t, m) // repo_url (blank, optional) -> confirm
+	m, cmd = pressEnter(t, m) // repo_url (blank, optional) -> pre_deploy_hook
 	if cmd != nil {
 		t.Fatal("did not expect completion yet (repo_url)")
+	}
+
+	m, cmd = pressEnter(t, m) // pre_deploy_hook (blank, optional) -> post_deploy_hook
+	if cmd != nil {
+		t.Fatal("did not expect completion yet (pre_deploy_hook)")
+	}
+
+	m, cmd = pressEnter(t, m) // post_deploy_hook (blank, optional) -> confirm
+	if cmd != nil {
+		t.Fatal("did not expect completion yet (post_deploy_hook)")
 	}
 
 	_, cmd = pressEnter(t, m) // confirm -> completes
@@ -219,9 +229,17 @@ func TestUserEditOverridesPreFilledValue(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("did not expect completion yet (domain)")
 	}
-	m, cmd = pressEnter(t, m) // repo_url -> confirm
+	m, cmd = pressEnter(t, m) // repo_url -> pre_deploy_hook
 	if cmd != nil {
 		t.Fatal("did not expect completion yet (repo_url)")
+	}
+	m, cmd = pressEnter(t, m) // pre_deploy_hook -> post_deploy_hook
+	if cmd != nil {
+		t.Fatal("did not expect completion yet (pre_deploy_hook)")
+	}
+	m, cmd = pressEnter(t, m) // post_deploy_hook -> confirm
+	if cmd != nil {
+		t.Fatal("did not expect completion yet (post_deploy_hook)")
 	}
 	_, cmd = pressEnter(t, m) // confirm -> completes
 	if cmd == nil {
