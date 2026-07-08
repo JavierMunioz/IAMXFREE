@@ -153,6 +153,30 @@ func (h *LinuxHost) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
+func (h *LinuxHost) WriteFile(path string, content []byte) error {
+	return os.WriteFile(path, content, 0o644)
+}
+
+func (h *LinuxHost) RemoveFile(path string) error {
+	return os.Remove(path)
+}
+
+func (h *LinuxHost) ReadDir(path string) ([]string, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(entries))
+	for i, entry := range entries {
+		names[i] = entry.Name()
+	}
+	return names, nil
+}
+
+func (h *LinuxHost) Symlink(target, linkPath string) error {
+	return os.Symlink(target, linkPath)
+}
+
 // StartProcess starts cmd in the background. It tracks the resulting
 // *os.Process internally and reaps it in a goroutine once it exits, so a
 // long-running child never becomes a zombie even though nothing calls

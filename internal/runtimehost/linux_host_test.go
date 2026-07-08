@@ -260,6 +260,138 @@ func TestLinuxHostReadFileMissing(t *testing.T) {
 	}
 }
 
+func TestLinuxHostWriteFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "example.conf")
+
+	host := runtimehost.NewLinuxHost()
+	if err := host.WriteFile(file, []byte("server {}")); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(data) != "server {}" {
+		t.Errorf("file content = %q, want %q", data, "server {}")
+	}
+}
+
+func TestLinuxHostWriteFileOverwrites(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "example.conf")
+	if err := os.WriteFile(file, []byte("old content that is longer"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	host := runtimehost.NewLinuxHost()
+	if err := host.WriteFile(file, []byte("new")); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(data) != "new" {
+		t.Errorf("file content = %q, want %q (truncated, not appended)", data, "new")
+	}
+}
+
+func TestLinuxHostRemoveFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "example.conf")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	host := runtimehost.NewLinuxHost()
+	if err := host.RemoveFile(file); err != nil {
+		t.Fatalf("RemoveFile() error = %v", err)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Errorf("expected file to be removed, stat error = %v", err)
+	}
+}
+
+func TestLinuxHostRemoveFileMissing(t *testing.T) {
+	host := runtimehost.NewLinuxHost()
+	if err := host.RemoveFile(filepath.Join(t.TempDir(), "missing.conf")); err == nil {
+		t.Fatal("expected an error for a missing file")
+	}
+}
+
+func TestLinuxHostReadDir(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a.conf", "b.conf"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("os.WriteFile() error = %v", err)
+		}
+	}
+
+	host := runtimehost.NewLinuxHost()
+	entries, err := host.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("ReadDir() = %v, want 2 entries", entries)
+	}
+}
+
+func TestLinuxHostReadDirMissing(t *testing.T) {
+	host := runtimehost.NewLinuxHost()
+	if _, err := host.ReadDir(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("expected an error for a missing directory")
+	}
+}
+
+func TestLinuxHostSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "sites-available", "example.com.conf")
+	linkPath := filepath.Join(dir, "sites-enabled", "example.com.conf")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(target, []byte("server {}"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	host := runtimehost.NewLinuxHost()
+	if err := host.Symlink(target, linkPath); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	resolved, err := os.Readlink(linkPath)
+	if err != nil {
+		t.Fatalf("os.Readlink() error = %v", err)
+	}
+	if resolved != target {
+		t.Errorf("Readlink() = %q, want %q", resolved, target)
+	}
+}
+
+func TestLinuxHostSymlinkAlreadyExists(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.conf")
+	linkPath := filepath.Join(dir, "link.conf")
+	if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.Symlink(target, linkPath); err != nil {
+		t.Fatalf("os.Symlink() error = %v", err)
+	}
+
+	host := runtimehost.NewLinuxHost()
+	if err := host.Symlink(target, linkPath); err == nil {
+		t.Fatal("expected an error when linkPath already exists")
+	}
+}
+
 func TestLinuxHostStartProcessAndIsRunning(t *testing.T) {
 	host := runtimehost.NewLinuxHost()
 

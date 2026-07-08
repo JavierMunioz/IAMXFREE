@@ -171,6 +171,123 @@ func TestFakeHostReadFileConfiguredError(t *testing.T) {
 	}
 }
 
+func TestFakeHostWriteFile(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+
+	if err := host.WriteFile("/etc/nginx/sites-available/example.conf", []byte("server {}")); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	content, ok := host.WrittenFile("/etc/nginx/sites-available/example.conf")
+	if !ok {
+		t.Fatal("expected WrittenFile to report the file as written")
+	}
+	if string(content) != "server {}" {
+		t.Fatalf("WrittenFile() = %q, want %q", content, "server {}")
+	}
+	if ok, _ := host.FileExists("/etc/nginx/sites-available/example.conf"); !ok {
+		t.Error("expected a written file to also report as existing")
+	}
+}
+
+func TestFakeHostWriteFileConfiguredError(t *testing.T) {
+	wantErr := errors.New("disk full")
+	host := runtimehosttest.NewFakeHost().
+		WithWriteFileError("/etc/nginx/sites-available/example.conf", wantErr)
+
+	err := host.WriteFile("/etc/nginx/sites-available/example.conf", []byte("server {}"))
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("WriteFile() error = %v, want %v", err, wantErr)
+	}
+	if _, ok := host.WrittenFile("/etc/nginx/sites-available/example.conf"); ok {
+		t.Fatal("expected a failed write to not be recorded")
+	}
+}
+
+func TestFakeHostRemoveFile(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().WithFile("/etc/nginx/sites-available/example.conf")
+
+	if err := host.RemoveFile("/etc/nginx/sites-available/example.conf"); err != nil {
+		t.Fatalf("RemoveFile() error = %v", err)
+	}
+	if !host.Removed("/etc/nginx/sites-available/example.conf") {
+		t.Fatal("expected Removed to report true after RemoveFile")
+	}
+	if ok, _ := host.FileExists("/etc/nginx/sites-available/example.conf"); ok {
+		t.Error("expected a removed file to no longer exist")
+	}
+}
+
+func TestFakeHostRemoveFileConfiguredError(t *testing.T) {
+	wantErr := errors.New("permission denied")
+	host := runtimehosttest.NewFakeHost().
+		WithFile("/etc/nginx/sites-available/example.conf").
+		WithRemoveFileError("/etc/nginx/sites-available/example.conf", wantErr)
+
+	err := host.RemoveFile("/etc/nginx/sites-available/example.conf")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("RemoveFile() error = %v, want %v", err, wantErr)
+	}
+	if ok, _ := host.FileExists("/etc/nginx/sites-available/example.conf"); !ok {
+		t.Error("expected a failed removal to leave the file in place")
+	}
+}
+
+func TestFakeHostReadDir(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().
+		WithReadDir("/etc/nginx/sites-available", []string{"example.com.conf", "api.example.com.conf"}, nil)
+
+	entries, err := host.ReadDir("/etc/nginx/sites-available")
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) != 2 || entries[0] != "example.com.conf" || entries[1] != "api.example.com.conf" {
+		t.Fatalf("ReadDir() = %v, want [example.com.conf api.example.com.conf]", entries)
+	}
+}
+
+func TestFakeHostReadDirUnconfiguredReturnsEmpty(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+
+	entries, err := host.ReadDir("/etc/nginx/sites-available")
+	if err != nil {
+		t.Fatalf("ReadDir() error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("ReadDir() = %v, want empty", entries)
+	}
+}
+
+func TestFakeHostSymlink(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+
+	err := host.Symlink(
+		"/etc/nginx/sites-available/example.com.conf",
+		"/etc/nginx/sites-enabled/example.com.conf",
+	)
+	if err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	target, ok := host.SymlinkTarget("/etc/nginx/sites-enabled/example.com.conf")
+	if !ok || target != "/etc/nginx/sites-available/example.com.conf" {
+		t.Fatalf("SymlinkTarget() = (%q, %v), want (%q, true)", target, ok, "/etc/nginx/sites-available/example.com.conf")
+	}
+	if ok, _ := host.FileExists("/etc/nginx/sites-enabled/example.com.conf"); !ok {
+		t.Error("expected the symlink path to report as existing")
+	}
+}
+
+func TestFakeHostSymlinkAlreadyExists(t *testing.T) {
+	host := runtimehosttest.NewFakeHost()
+	_ = host.Symlink("/etc/nginx/sites-available/example.com.conf", "/etc/nginx/sites-enabled/example.com.conf")
+
+	err := host.Symlink("/etc/nginx/sites-available/example.com.conf", "/etc/nginx/sites-enabled/example.com.conf")
+	if err == nil {
+		t.Fatal("expected Symlink to fail when linkPath already exists")
+	}
+}
+
 func TestFakeHostStartProcessConfigured(t *testing.T) {
 	host := runtimehosttest.NewFakeHost().
 		WithStartProcess("npm", []string{"start"}, 4242, nil)

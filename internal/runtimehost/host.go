@@ -43,6 +43,25 @@ type Host interface {
 	// directly.
 	ReadFile(path string) ([]byte, error)
 
+	// WriteFile writes content to path, creating the file if it does not
+	// exist and truncating it if it does. Callers that generate config on
+	// disk (e.g. an Nginx virtual host file) use this instead of touching
+	// the filesystem directly.
+	WriteFile(path string, content []byte) error
+
+	// RemoveFile deletes the file or symlink at path. It is not for
+	// directories.
+	RemoveFile(path string) error
+
+	// ReadDir lists the base names of the entries directly inside path,
+	// non-recursively. It does not distinguish files from subdirectories or
+	// symlinks — callers that care use FileExists/DirExists on each entry.
+	ReadDir(path string) ([]string, error)
+
+	// Symlink creates a symlink at linkPath pointing to target, equivalent
+	// to `ln -s target linkPath`. It fails if linkPath already exists.
+	Symlink(target, linkPath string) error
+
 	// StartProcess starts cmd as a background process and returns its PID
 	// immediately, without waiting for it to exit. Unlike Run/RunCaptured,
 	// this is how a long-running process (e.g. a web server) is started

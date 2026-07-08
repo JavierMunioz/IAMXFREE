@@ -25,6 +25,15 @@ type FakeHost struct {
 	fileContents map[string][]byte
 	fileErrors   map[string]error
 
+	written       map[string][]byte
+	writeErrors   map[string]error
+	removed       map[string]bool
+	removeErrors  map[string]error
+	dirEntries    map[string][]string
+	dirErrors     map[string]error
+	symlinks      map[string]string
+	symlinkErrors map[string]error
+
 	startProcessResults map[string]startProcessResult
 	runningPIDs         map[int]bool
 	stopErrors          map[int]error
@@ -57,6 +66,14 @@ func NewFakeHost() *FakeHost {
 		dirs:                make(map[string]bool),
 		fileContents:        make(map[string][]byte),
 		fileErrors:          make(map[string]error),
+		written:             make(map[string][]byte),
+		writeErrors:         make(map[string]error),
+		removed:             make(map[string]bool),
+		removeErrors:        make(map[string]error),
+		dirEntries:          make(map[string][]string),
+		dirErrors:           make(map[string]error),
+		symlinks:            make(map[string]string),
+		symlinkErrors:       make(map[string]error),
 		startProcessResults: make(map[string]startProcessResult),
 		runningPIDs:         make(map[int]bool),
 		stopErrors:          make(map[int]error),
@@ -112,6 +129,54 @@ func (f *FakeHost) WithReadFile(path string, content []byte, err error) *FakeHos
 	f.fileContents[path] = content
 	f.fileErrors[path] = err
 	return f
+}
+
+// WithWriteFileError makes WriteFile(path, _) return err instead of
+// succeeding.
+func (f *FakeHost) WithWriteFileError(path string, err error) *FakeHost {
+	f.writeErrors[path] = err
+	return f
+}
+
+// WrittenFile reports the content most recently written to path via
+// WriteFile, so a test can assert what a Create/Update operation generated.
+func (f *FakeHost) WrittenFile(path string) ([]byte, bool) {
+	content, ok := f.written[path]
+	return content, ok
+}
+
+// WithRemoveFileError makes RemoveFile(path) return err instead of
+// succeeding.
+func (f *FakeHost) WithRemoveFileError(path string, err error) *FakeHost {
+	f.removeErrors[path] = err
+	return f
+}
+
+// Removed reports whether RemoveFile(path) was called, regardless of
+// whether it succeeded.
+func (f *FakeHost) Removed(path string) bool {
+	return f.removed[path]
+}
+
+// WithReadDir makes ReadDir(path) return entries and err.
+func (f *FakeHost) WithReadDir(path string, entries []string, err error) *FakeHost {
+	f.dirEntries[path] = entries
+	f.dirErrors[path] = err
+	return f
+}
+
+// WithSymlinkError makes Symlink(_, linkPath) return err instead of
+// succeeding.
+func (f *FakeHost) WithSymlinkError(linkPath string, err error) *FakeHost {
+	f.symlinkErrors[linkPath] = err
+	return f
+}
+
+// SymlinkTarget reports what target Symlink(target, linkPath) was called
+// with for linkPath, so a test can assert a site was enabled correctly.
+func (f *FakeHost) SymlinkTarget(linkPath string) (string, bool) {
+	target, ok := f.symlinks[linkPath]
+	return target, ok
 }
 
 // WithStartProcess makes StartProcess return pid and err for a command
@@ -215,6 +280,44 @@ func (f *FakeHost) ReadFile(path string) ([]byte, error) {
 		return content, nil
 	}
 	return nil, os.ErrNotExist
+}
+
+func (f *FakeHost) WriteFile(path string, content []byte) error {
+	if err, ok := f.writeErrors[path]; ok && err != nil {
+		return err
+	}
+	f.written[path] = content
+	f.files[path] = true
+	return nil
+}
+
+func (f *FakeHost) RemoveFile(path string) error {
+	f.removed[path] = true
+	if err, ok := f.removeErrors[path]; ok && err != nil {
+		return err
+	}
+	delete(f.files, path)
+	delete(f.written, path)
+	return nil
+}
+
+func (f *FakeHost) ReadDir(path string) ([]string, error) {
+	if err, ok := f.dirErrors[path]; ok && err != nil {
+		return nil, err
+	}
+	return f.dirEntries[path], nil
+}
+
+func (f *FakeHost) Symlink(target, linkPath string) error {
+	if err, ok := f.symlinkErrors[linkPath]; ok && err != nil {
+		return err
+	}
+	if _, exists := f.symlinks[linkPath]; exists {
+		return fmt.Errorf("runtimehosttest: symlink already exists at %q", linkPath)
+	}
+	f.symlinks[linkPath] = target
+	f.files[linkPath] = true
+	return nil
 }
 
 func (f *FakeHost) StartProcess(_ context.Context, cmd runtimehost.Command) (int, error) {
