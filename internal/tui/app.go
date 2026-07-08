@@ -9,9 +9,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/JavierMunioz/IAMXFREE/internal/deployment"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/deploymentplan"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/detail"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/logs"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
@@ -25,6 +27,7 @@ const (
 	screenWizard
 	screenDetail
 	screenLogs
+	screenDeploymentPlan
 )
 
 // applicationRegisteredMsg is emitted once ApplicationService.Register
@@ -45,25 +48,28 @@ type applicationRegistrationFailedMsg struct {
 // the actual persistence decision to services.ApplicationService and the
 // project-analysis decision to services.ApplicationSetupService.
 type RootModel struct {
-	service   services.ApplicationService
-	execution services.ExecutionService
-	setup     services.ApplicationSetupService
+	service          services.ApplicationService
+	execution        services.ExecutionService
+	setup            services.ApplicationSetupService
+	deploymentEngine *deployment.Engine
 
-	screen    screen
-	dashboard dashboard.Model
-	wizard    wizard.Model
-	detail    detail.Model
-	logs      logs.Model
+	screen         screen
+	dashboard      dashboard.Model
+	wizard         wizard.Model
+	detail         detail.Model
+	logs           logs.Model
+	deploymentPlan deploymentplan.Model
 }
 
 // NewRootModel builds the initial application model.
-func NewRootModel(service services.ApplicationService, execution services.ExecutionService, setup services.ApplicationSetupService) RootModel {
+func NewRootModel(service services.ApplicationService, execution services.ExecutionService, setup services.ApplicationSetupService, deploymentEngine *deployment.Engine) RootModel {
 	return RootModel{
-		service:   service,
-		execution: execution,
-		setup:     setup,
-		screen:    screenDashboard,
-		dashboard: dashboard.New(service, execution),
+		service:          service,
+		execution:        execution,
+		setup:            setup,
+		deploymentEngine: deploymentEngine,
+		screen:           screenDashboard,
+		dashboard:        dashboard.New(service, execution),
 	}
 }
 
@@ -111,6 +117,15 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.screen = screenDetail
 		return m, nil
 
+	case detail.OpenDeploymentPlanMsg:
+		m.screen = screenDeploymentPlan
+		m.deploymentPlan = deploymentplan.New(m.deploymentEngine, msg.AppID)
+		return m, m.deploymentPlan.Init()
+
+	case deploymentplan.BackMsg:
+		m.screen = screenDetail
+		return m, nil
+
 	case applicationRegisteredMsg:
 		m.dashboard = m.dashboard.SetStatus(fmt.Sprintf("Application %q registered.", msg.app.Name))
 		return m, m.dashboard.Reload()
@@ -140,6 +155,11 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.logs.Update(msg)
 		m.logs = updated.(logs.Model)
 		return m, cmd
+
+	case screenDeploymentPlan:
+		updated, cmd := m.deploymentPlan.Update(msg)
+		m.deploymentPlan = updated.(deploymentplan.Model)
+		return m, cmd
 	}
 
 	updated, cmd := m.dashboard.Update(msg)
@@ -165,13 +185,15 @@ func (m RootModel) View() string {
 		return m.detail.View()
 	case screenLogs:
 		return m.logs.View()
+	case screenDeploymentPlan:
+		return m.deploymentPlan.View()
 	}
 	return m.dashboard.View()
 }
 
 // Run starts the Bubble Tea program using the terminal's real stdin/stdout.
-func Run(service services.ApplicationService, execution services.ExecutionService, setup services.ApplicationSetupService) error {
-	program := tea.NewProgram(NewRootModel(service, execution, setup), tea.WithAltScreen())
+func Run(service services.ApplicationService, execution services.ExecutionService, setup services.ApplicationSetupService, deploymentEngine *deployment.Engine) error {
+	program := tea.NewProgram(NewRootModel(service, execution, setup, deploymentEngine), tea.WithAltScreen())
 	_, err := program.Run()
 	return err
 }

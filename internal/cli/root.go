@@ -5,10 +5,12 @@ package cli
 
 import (
 	"github.com/JavierMunioz/IAMXFREE/internal/config"
+	"github.com/JavierMunioz/IAMXFREE/internal/deployment"
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
 	"github.com/JavierMunioz/IAMXFREE/internal/git"
 	"github.com/JavierMunioz/IAMXFREE/internal/inspection"
 	"github.com/JavierMunioz/IAMXFREE/internal/monitor"
+	"github.com/JavierMunioz/IAMXFREE/internal/nginx"
 	"github.com/JavierMunioz/IAMXFREE/internal/planner"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories/jsonstore"
 	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
@@ -60,7 +62,10 @@ func NewRootCommand() *cobra.Command {
 			deploymentPlanner := planner.NewDeploymentPlanner(planner.NewDefaultRegistry())
 			setup := services.NewApplicationSetupService(inspector, deploymentPlanner)
 
-			return tui.Run(service, executionService, setup)
+			nginxManager := nginx.NewManager(host)
+			deploymentEngine := deployment.NewEngine(service, executionService, gitManager, nginxManager)
+
+			return tui.Run(service, executionService, setup, deploymentEngine)
 		},
 	}
 

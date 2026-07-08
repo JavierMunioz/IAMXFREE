@@ -8,15 +8,33 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/JavierMunioz/IAMXFREE/internal/deployment"
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
+	"github.com/JavierMunioz/IAMXFREE/internal/git"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
+	"github.com/JavierMunioz/IAMXFREE/internal/nginx"
+	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost/runtimehosttest"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/dashboard"
+	"github.com/JavierMunioz/IAMXFREE/internal/tui/deploymentplan"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/detail"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/logs"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizard"
 	"github.com/JavierMunioz/IAMXFREE/internal/tui/wizards/application"
 )
+
+// testDeploymentEngine returns a deployment.Engine backed entirely by
+// fakes/FakeHost-backed managers — enough for RootModel to construct a
+// deploymentplan.Model without touching the real filesystem or a real git
+// binary.
+func testDeploymentEngine(appService services.ApplicationService, executionService services.ExecutionService) *deployment.Engine {
+	return deployment.NewEngine(
+		appService,
+		executionService,
+		git.NewManager(runtimehosttest.NewFakeHost()),
+		nginx.NewManager(runtimehosttest.NewFakeHost()),
+	)
+}
 
 type fakeApplicationService struct {
 	registerErr error
@@ -90,7 +108,7 @@ func validResult() wizard.Result {
 }
 
 func TestRootModelPressingAOpensWizard(t *testing.T) {
-	m := NewRootModel(&fakeApplicationService{}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{}, fakeExecutionService{}))
 
 	// "a" is handled by the dashboard, which asks the root model to open
 	// the wizard via a command rather than switching screens itself.
@@ -113,7 +131,7 @@ func TestRootModelPressingAOpensWizard(t *testing.T) {
 }
 
 func TestRootModelQuits(t *testing.T) {
-	m := NewRootModel(&fakeApplicationService{}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{}, fakeExecutionService{}))
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if cmd == nil {
@@ -122,7 +140,7 @@ func TestRootModelQuits(t *testing.T) {
 }
 
 func TestRootModelCancelledWizardReturnsToDashboard(t *testing.T) {
-	m := NewRootModel(&fakeApplicationService{}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{}, fakeExecutionService{}))
 	m.screen = screenWizard
 
 	updated, _ := m.Update(wizard.CancelledMsg{})
@@ -137,7 +155,7 @@ func TestRootModelCancelledWizardReturnsToDashboard(t *testing.T) {
 }
 
 func TestRootModelCompletedWizardRegistersApplication(t *testing.T) {
-	m := NewRootModel(&fakeApplicationService{}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{}, fakeExecutionService{}))
 	m.screen = screenWizard
 
 	updated, cmd := m.Update(wizard.CompletedMsg{Result: validResult()})
@@ -168,7 +186,7 @@ func TestRootModelCompletedWizardRegistersApplication(t *testing.T) {
 
 func TestRootModelOpenDetailMsgSwitchesToDetailScreen(t *testing.T) {
 	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
-	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
 
 	updated, cmd := m.Update(dashboard.OpenDetailMsg{AppID: app.ID})
 	m = updated.(RootModel)
@@ -182,7 +200,7 @@ func TestRootModelOpenDetailMsgSwitchesToDetailScreen(t *testing.T) {
 
 func TestRootModelBackMsgReturnsToDashboard(t *testing.T) {
 	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
-	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
 	m.screen = screenDetail
 
 	updated, cmd := m.Update(detail.BackMsg{})
@@ -197,7 +215,7 @@ func TestRootModelBackMsgReturnsToDashboard(t *testing.T) {
 
 func TestRootModelOpenLogsMsgSwitchesToLogsScreen(t *testing.T) {
 	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
-	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
 	m.screen = screenDetail
 
 	updated, cmd := m.Update(detail.OpenLogsMsg{AppID: app.ID, Session: services.RunSession{PID: 4242}})
@@ -212,7 +230,7 @@ func TestRootModelOpenLogsMsgSwitchesToLogsScreen(t *testing.T) {
 
 func TestRootModelLogsBackMsgReturnsToDetail(t *testing.T) {
 	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
-	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
 	m.screen = screenLogs
 
 	updated, _ := m.Update(logs.BackMsg{})
@@ -222,9 +240,36 @@ func TestRootModelLogsBackMsgReturnsToDetail(t *testing.T) {
 	}
 }
 
+func TestRootModelOpenDeploymentPlanMsgSwitchesToDeploymentPlanScreen(t *testing.T) {
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
+	m.screen = screenDetail
+
+	updated, cmd := m.Update(detail.OpenDeploymentPlanMsg{AppID: app.ID})
+	m = updated.(RootModel)
+	if m.screen != screenDeploymentPlan {
+		t.Fatalf("screen = %v, want screenDeploymentPlan", m.screen)
+	}
+	if cmd == nil {
+		t.Fatal("expected opening the deployment plan to return its Init command")
+	}
+}
+
+func TestRootModelDeploymentPlanBackMsgReturnsToDetail(t *testing.T) {
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
+	m.screen = screenDeploymentPlan
+
+	updated, _ := m.Update(deploymentplan.BackMsg{})
+	m = updated.(RootModel)
+	if m.screen != screenDetail {
+		t.Fatalf("screen = %v, want screenDetail", m.screen)
+	}
+}
+
 func TestRootModelRegistrationFailureShowsError(t *testing.T) {
 	wantErr := errors.New("boom")
-	m := NewRootModel(&fakeApplicationService{registerErr: wantErr}, fakeExecutionService{}, fakeApplicationSetupService{})
+	m := NewRootModel(&fakeApplicationService{registerErr: wantErr}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{registerErr: wantErr}, fakeExecutionService{}))
 	m.screen = screenWizard
 
 	updated, cmd := m.Update(wizard.CompletedMsg{Result: validResult()})
