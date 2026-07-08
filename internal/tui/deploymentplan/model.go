@@ -18,6 +18,13 @@ import (
 // decides what happens next.
 type BackMsg struct{}
 
+// ExecutePlanMsg signals that the user asked to actually run this plan.
+// This screen has no notion of "execution screen" beyond this — whatever
+// hosts it decides what happens next.
+type ExecutePlanMsg struct {
+	Plan deployment.DeploymentPlan
+}
+
 type planLoadedMsg struct {
 	plan deployment.DeploymentPlan
 }

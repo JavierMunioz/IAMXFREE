@@ -141,6 +141,33 @@ func TestBackKeyEmitsBackMsg(t *testing.T) {
 	}
 }
 
+func TestEnterKeyDoesNothingBeforePlanLoaded(t *testing.T) {
+	m := New(testEngine(&models.Application{ID: "app-1"}, nil), "app-1")
+
+	_, cmd := m.handleKey(keyMsg("enter"))
+	if cmd != nil {
+		t.Fatal("expected enter to do nothing before the plan is loaded")
+	}
+}
+
+func TestEnterKeyEmitsExecutePlanMsgOnceLoaded(t *testing.T) {
+	m := New(testEngine(&models.Application{ID: "app-1"}, nil), "app-1")
+	plan := deployment.DeploymentPlan{ApplicationID: "app-1", ApplicationName: "my-api"}
+	m, _ = update(t, m, planLoadedMsg{plan: plan})
+
+	_, cmd := m.handleKey(keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("expected enter to return a command once the plan is loaded")
+	}
+	msg, ok := cmd().(ExecutePlanMsg)
+	if !ok {
+		t.Fatalf("expected ExecutePlanMsg, got %T", cmd())
+	}
+	if msg.Plan.ApplicationName != "my-api" {
+		t.Errorf("Plan.ApplicationName = %q, want %q", msg.Plan.ApplicationName, "my-api")
+	}
+}
+
 func update(t *testing.T, m Model, msg tea.Msg) (Model, tea.Cmd) {
 	t.Helper()
 	updated, cmd := m.Update(msg)
@@ -155,6 +182,8 @@ func keyMsg(s string) tea.KeyMsg {
 	switch s {
 	case "esc":
 		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "enter":
+		return tea.KeyMsg{Type: tea.KeyEnter}
 	default:
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	}

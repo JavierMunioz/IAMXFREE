@@ -21,7 +21,7 @@ func (m Model) View() string {
 	for _, step := range m.plan.Steps {
 		sections = append(sections, m.renderStep(step))
 	}
-	sections = append(sections, footerStyle.Render("esc/b: back  ·  q: quit"))
+	sections = append(sections, footerStyle.Render("enter: execute plan  ·  esc/b: back  ·  q: quit"))
 
 	return strings.Join(sections, "\n\n")
 }
