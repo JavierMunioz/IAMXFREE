@@ -30,4 +30,13 @@ type Operation struct {
 	// failed; Run never needs to know about OperationState itself — the
 	// Executor derives it from whether Run returned an error.
 	Run func(ctx context.Context) error
+
+	// Compensate, if set, undoes what Run did — called only when this
+	// Operation succeeded and a later Operation in the same run failed.
+	// Not every Operation is reversible (e.g. a build has nothing
+	// meaningful to undo); leaving Compensate nil is how an Operation
+	// says so. Like Run, Compensate never needs to know about
+	// OperationState — a non-nil error means the compensation itself
+	// failed.
+	Compensate func(ctx context.Context) error
 }
