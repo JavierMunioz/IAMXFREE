@@ -46,11 +46,12 @@ func (m Model) snapshotCmd() tea.Cmd {
 	}
 }
 
-// refreshCmd re-queries the strategy's health and, if a session is being
-// tracked, its current status and runtime snapshot. This is the only
-// refresh IAMXFREE performs — there is no automatic/periodic refresh yet.
+// refreshCmd re-queries the strategy's health, the application's Git
+// status and, if a session is being tracked, its current status and
+// runtime snapshot. This is the only refresh IAMXFREE performs — there is
+// no automatic/periodic refresh yet.
 func (m Model) refreshCmd() tea.Cmd {
-	cmds := []tea.Cmd{m.loadHealthCmd()}
+	cmds := []tea.Cmd{m.loadHealthCmd(), m.loadGitStatusCmd()}
 	if m.hasSession {
 		cmds = append(cmds, m.refreshSessionCmd(), m.snapshotCmd())
 	}

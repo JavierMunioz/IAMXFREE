@@ -22,14 +22,33 @@ func TestRefreshKeyReturnsCommandWithoutSession(t *testing.T) {
 	}
 }
 
-func TestRefreshCmdOnlyChecksHealthWithoutSession(t *testing.T) {
+func TestRefreshCmdOnlyChecksHealthAndGitWithoutSession(t *testing.T) {
 	app := newTestApp()
 	appSvc := &fakeAppService{app: app, health: services.ExecutionHealth{StrategyName: "Node.js (npm)", Healthy: true}}
 	m := New(appSvc, &fakeExecutionService{}, app.ID)
 
-	msg := m.refreshCmd()()
-	if _, ok := msg.(healthLoadedMsg); !ok {
-		t.Fatalf("expected healthLoadedMsg when no session is tracked, got %T", msg)
+	batch, ok := m.refreshCmd()().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected a tea.BatchMsg, got %T", m.refreshCmd()())
+	}
+
+	var sawHealth, sawGit bool
+	for _, cmd := range batch {
+		switch cmd().(type) {
+		case healthLoadedMsg:
+			sawHealth = true
+		case gitStatusLoadedMsg, gitStatusUnavailableMsg:
+			sawGit = true
+		}
+	}
+	if !sawHealth {
+		t.Error("expected the batch to include a command producing healthLoadedMsg")
+	}
+	if !sawGit {
+		t.Error("expected the batch to include a command producing a Git status message")
+	}
+	if len(batch) != 2 {
+		t.Fatalf("expected exactly 2 commands without a tracked session, got %d", len(batch))
 	}
 }
 

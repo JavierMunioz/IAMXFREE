@@ -89,6 +89,46 @@ func formatBytesMetric(metric services.Metric) string {
 	return fmt.Sprintf("%.1f MB", metric.Value/(1024*1024))
 }
 
+// renderGitPanel shows the application's Git repository state: current
+// branch, last commit (short SHA), working tree cleanliness and configured
+// remote. Read-only, and only ever reflects the last load (Init or f5) —
+// there is no automatic polling.
+func (m Model) renderGitPanel(width int) string {
+	var lines []string
+	lines = append(lines, primaryStyle.Bold(true).Render("Source Control"))
+	lines = append(lines, "")
+
+	switch {
+	case !m.hasGitStatus:
+		lines = append(lines, mutedStyle.Render("Loading…"))
+	case !m.gitStatus.IsRepo:
+		lines = append(lines, mutedStyle.Render("No Git repository."))
+	default:
+		branch := m.gitStatus.Branch
+		if m.gitStatus.Detached {
+			branch = "detached HEAD"
+		}
+
+		workingTree := lipgloss.NewStyle().Foreground(colorGood).Render("● clean")
+		if !m.gitStatus.Clean {
+			workingTree = lipgloss.NewStyle().Foreground(colorCritical).Render(
+				fmt.Sprintf("✕ dirty (%d modified, %d untracked)", m.gitStatus.Modified, m.gitStatus.Untracked))
+		}
+
+		rows := [][2]string{
+			{"Branch", valueOrDash(branch)},
+			{"Commit", valueOrDash(m.gitStatus.CommitSHA)},
+			{"Working tree", workingTree},
+			{"Remote", valueOrDash(m.gitStatus.RemoteName)},
+		}
+		for _, row := range rows {
+			lines = append(lines, labelStyle.Render(row[0])+row[1])
+		}
+	}
+
+	return panelStyle.Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
 // renderExecutionPanel shows the live session IAMXFREE is tracking for this
 // application, if any. When no session is active, that is stated clearly
 // rather than leaving fields blank.

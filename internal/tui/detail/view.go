@@ -15,14 +15,15 @@ func (m Model) View() string {
 		return mutedStyle.Render("Loading…")
 	}
 
-	sections := []string{m.renderTopPanel(), m.renderMiddleRow()}
+	panelWidth := m.width - 4
+	if panelWidth < 20 {
+		panelWidth = 20
+	}
+
+	sections := []string{m.renderTopPanel(), m.renderMiddleRow(), m.renderGitPanel(panelWidth)}
 
 	if m.hasSession {
-		width := m.width - 4
-		if width < 20 {
-			width = 20
-		}
-		sections = append(sections, m.renderMetricsPanel(width))
+		sections = append(sections, m.renderMetricsPanel(panelWidth))
 	}
 
 	if status := m.renderStatusLine(); status != "" {

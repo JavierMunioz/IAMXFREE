@@ -89,6 +89,82 @@ func TestRenderMetricsPanelShowsAvailableValues(t *testing.T) {
 	}
 }
 
+func TestRenderGitPanelShowsLoadingBeforeFirstLoad(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+
+	panel := m.renderGitPanel(60)
+	if !strings.Contains(panel, "Loading") {
+		t.Errorf("expected a loading message before the first check, got:\n%s", panel)
+	}
+}
+
+func TestRenderGitPanelShowsNoRepository(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m.hasGitStatus = true
+	m.gitStatus = services.GitStatus{IsRepo: false}
+
+	panel := m.renderGitPanel(60)
+	if !strings.Contains(panel, "No Git repository") {
+		t.Errorf("expected a clear 'no repository' message, got:\n%s", panel)
+	}
+}
+
+func TestRenderGitPanelShowsRepositoryDetails(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m.hasGitStatus = true
+	m.gitStatus = services.GitStatus{
+		IsRepo:     true,
+		Branch:     "main",
+		CommitSHA:  "abc123d",
+		Clean:      true,
+		RemoteName: "origin",
+	}
+
+	panel := m.renderGitPanel(60)
+	for _, want := range []string{"main", "abc123d", "clean", "origin"} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("git panel missing %q:\n%s", want, panel)
+		}
+	}
+}
+
+func TestRenderGitPanelShowsDirtyWorkingTree(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m.hasGitStatus = true
+	m.gitStatus = services.GitStatus{IsRepo: true, Branch: "main", Clean: false, Modified: 2, Untracked: 1}
+
+	panel := m.renderGitPanel(60)
+	if !strings.Contains(panel, "dirty (2 modified, 1 untracked)") {
+		t.Errorf("expected a dirty working tree summary, got:\n%s", panel)
+	}
+}
+
+func TestRenderGitPanelShowsDetachedHead(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m.hasGitStatus = true
+	m.gitStatus = services.GitStatus{IsRepo: true, Detached: true}
+
+	panel := m.renderGitPanel(60)
+	if !strings.Contains(panel, "detached HEAD") {
+		t.Errorf("expected a detached HEAD indicator, got:\n%s", panel)
+	}
+}
+
+func TestViewAlwaysShowsSourceControlPanel(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m, _ = update(t, m, appLoadedMsg{app: app})
+
+	if !strings.Contains(m.View(), "Source Control") {
+		t.Fatalf("expected the Source Control panel regardless of session state, got:\n%s", m.View())
+	}
+}
+
 func TestViewShowsMetricsPanelOnlyWithASession(t *testing.T) {
 	app := newTestApp()
 	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)

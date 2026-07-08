@@ -169,6 +169,54 @@ func TestHealthUnavailableClearsStrategy(t *testing.T) {
 	}
 }
 
+func TestGitStatusLoadedUpdatesModel(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+
+	m, _ = update(t, m, gitStatusLoadedMsg{status: services.GitStatus{IsRepo: true, Branch: "main"}})
+	if !m.hasGitStatus || !m.gitStatus.IsRepo || m.gitStatus.Branch != "main" {
+		t.Fatalf("expected git status to be loaded, got hasGitStatus=%v status=%+v", m.hasGitStatus, m.gitStatus)
+	}
+}
+
+func TestGitStatusUnavailableClearsStatus(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+
+	m, _ = update(t, m, gitStatusLoadedMsg{status: services.GitStatus{IsRepo: true, Branch: "main"}})
+	m, _ = update(t, m, gitStatusUnavailableMsg{})
+
+	if m.hasGitStatus {
+		t.Fatalf("expected git status to be cleared, got hasGitStatus=%v", m.hasGitStatus)
+	}
+}
+
+func TestLoadGitStatusCmdReturnsLoadedMsg(t *testing.T) {
+	app := newTestApp()
+	appSvc := &fakeAppService{app: app, git: services.GitStatus{IsRepo: true, Branch: "main"}}
+	m := New(appSvc, &fakeExecutionService{}, app.ID)
+
+	msg := m.loadGitStatusCmd()()
+	loaded, ok := msg.(gitStatusLoadedMsg)
+	if !ok {
+		t.Fatalf("expected gitStatusLoadedMsg, got %T", msg)
+	}
+	if !loaded.status.IsRepo || loaded.status.Branch != "main" {
+		t.Fatalf("status = %+v, want IsRepo=true Branch=main", loaded.status)
+	}
+}
+
+func TestLoadGitStatusCmdReturnsUnavailableOnError(t *testing.T) {
+	app := newTestApp()
+	appSvc := &fakeAppService{app: app, gitErr: errors.New("boom")}
+	m := New(appSvc, &fakeExecutionService{}, app.ID)
+
+	msg := m.loadGitStatusCmd()()
+	if _, ok := msg.(gitStatusUnavailableMsg); !ok {
+		t.Fatalf("expected gitStatusUnavailableMsg, got %T", msg)
+	}
+}
+
 func TestViewRendersTopPanelFields(t *testing.T) {
 	app := newTestApp()
 	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)

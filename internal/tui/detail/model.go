@@ -47,6 +47,18 @@ type healthLoadedMsg struct {
 // nothing to display in the Strategy/Health fields.
 type healthUnavailableMsg struct{}
 
+// gitStatusLoadedMsg carries the application's Git status, obtained on
+// Init and on every explicit refresh (f5) — never automatically.
+type gitStatusLoadedMsg struct {
+	status services.GitStatus
+}
+
+// gitStatusUnavailableMsg means CheckGitStatus failed outright (as opposed
+// to a normal "not a repository" result, which still arrives as
+// gitStatusLoadedMsg with IsRepo == false) — not an error to show, just
+// nothing to display in the Source Control panel.
+type gitStatusUnavailableMsg struct{}
+
 // activeSessionLoadedMsg carries whatever session ExecutionService is
 // already tracking for this application, if any. This is how the screen
 // learns about a session it did not itself start in this Model instance —
@@ -83,6 +95,9 @@ type Model struct {
 	healthy      bool
 	healthKnown  bool
 
+	gitStatus    services.GitStatus
+	hasGitStatus bool
+
 	session    services.RunSession
 	hasSession bool
 
@@ -112,7 +127,7 @@ func New(appService services.ApplicationService, executionService services.Execu
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadAppCmd(), m.loadHealthCmd(), m.loadActiveSessionCmd())
+	return tea.Batch(m.loadAppCmd(), m.loadHealthCmd(), m.loadActiveSessionCmd(), m.loadGitStatusCmd())
 }
 
 func (m Model) loadAppCmd() tea.Cmd {
@@ -138,6 +153,20 @@ func (m Model) loadHealthCmd() tea.Cmd {
 			return healthUnavailableMsg{}
 		}
 		return healthLoadedMsg{strategyName: health.StrategyName, healthy: health.Healthy}
+	}
+}
+
+// loadGitStatusCmd re-checks the application's Git repository status. Used
+// both on Init and on an explicit refresh.
+func (m Model) loadGitStatusCmd() tea.Cmd {
+	service := m.appService
+	id := m.appID
+	return func() tea.Msg {
+		status, err := service.CheckGitStatus(context.Background(), id)
+		if err != nil {
+			return gitStatusUnavailableMsg{}
+		}
+		return gitStatusLoadedMsg{status: status}
 	}
 }
 
@@ -197,6 +226,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case healthUnavailableMsg:
 		m.healthKnown = false
 		m.strategyName = ""
+		return m, nil
+
+	case gitStatusLoadedMsg:
+		m.gitStatus = msg.status
+		m.hasGitStatus = true
+		return m, nil
+
+	case gitStatusUnavailableMsg:
+		m.hasGitStatus = false
+		m.gitStatus = services.GitStatus{}
 		return m, nil
 
 	case activeSessionLoadedMsg:
