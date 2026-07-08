@@ -8,4 +8,5 @@ const (
 	ComponentGit       DeploymentComponent = "git"
 	ComponentExecution DeploymentComponent = "execution"
 	ComponentNginx     DeploymentComponent = "nginx"
+	ComponentHooks     DeploymentComponent = "hooks"
 )
