@@ -47,6 +47,12 @@ func (f *fakeAppService) CheckGitStatus(context.Context, string) (services.GitSt
 // fakeExecutionService is a minimal services.ExecutionService test double.
 type fakeExecutionService struct{}
 
+func (fakeExecutionService) Install(context.Context, string) error {
+	return execution.ErrNotImplemented
+}
+func (fakeExecutionService) Build(context.Context, string) error {
+	return execution.ErrNotImplemented
+}
 func (fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
 	return services.RunSession{}, execution.ErrNotImplemented
 }

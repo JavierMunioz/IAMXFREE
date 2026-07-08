@@ -17,6 +17,8 @@ type fakeExecutionService struct {
 	logsErr   error
 }
 
+func (f *fakeExecutionService) Install(context.Context, string) error { return nil }
+func (f *fakeExecutionService) Build(context.Context, string) error   { return nil }
 func (f *fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
 	return services.RunSession{}, nil
 }

@@ -45,6 +45,12 @@ type fakeExecutionService struct {
 	running bool
 }
 
+func (f *fakeExecutionService) Install(context.Context, string) error {
+	return execution.ErrNotImplemented
+}
+func (f *fakeExecutionService) Build(context.Context, string) error {
+	return execution.ErrNotImplemented
+}
 func (f *fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
 	return services.RunSession{}, execution.ErrNotImplemented
 }

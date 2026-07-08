@@ -37,6 +37,9 @@ type fakeStrategy struct {
 	health    execution.HealthCheck
 	healthErr error
 
+	installErr error
+	buildErr   error
+
 	startSession  execution.Session
 	startErr      error
 	stopErr       error
@@ -57,10 +60,10 @@ func (s *fakeStrategy) Readiness(context.Context, *models.Application) (executio
 	return execution.Readiness{}, execution.ErrNotImplemented
 }
 func (s *fakeStrategy) Install(context.Context, *models.Application) error {
-	return execution.ErrNotImplemented
+	return s.installErr
 }
 func (s *fakeStrategy) Build(context.Context, *models.Application) error {
-	return execution.ErrNotImplemented
+	return s.buildErr
 }
 func (s *fakeStrategy) Start(context.Context, *models.Application) (execution.Session, error) {
 	return s.startSession, s.startErr

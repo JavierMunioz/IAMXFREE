@@ -16,6 +16,14 @@ import (
 // execution.Strategy the same way ApplicationService does, but callers
 // depend on this interface instead of internal/execution directly.
 type ExecutionService interface {
+	// Install resolves the application's execution strategy and runs its
+	// configured install step (e.g. `npm install`).
+	Install(ctx context.Context, appID string) error
+
+	// Build resolves the application's execution strategy and runs its
+	// configured build step (e.g. `npm run build`).
+	Build(ctx context.Context, appID string) error
+
 	// Start resolves the application's execution strategy and starts its
 	// configured start command, returning the resulting session.
 	Start(ctx context.Context, appID string) (RunSession, error)
@@ -158,6 +166,34 @@ func (s *executionService) ActiveSession(appID string) (RunSession, bool) {
 		return RunSession{}, false
 	}
 	return toRunSession(session), true
+}
+
+func (s *executionService) Install(ctx context.Context, appID string) error {
+	app, err := s.repo.FindByID(ctx, appID)
+	if err != nil {
+		return err
+	}
+
+	strategy, err := s.resolver.Resolve(app)
+	if err != nil {
+		return err
+	}
+
+	return strategy.Install(ctx, app)
+}
+
+func (s *executionService) Build(ctx context.Context, appID string) error {
+	app, err := s.repo.FindByID(ctx, appID)
+	if err != nil {
+		return err
+	}
+
+	strategy, err := s.resolver.Resolve(app)
+	if err != nil {
+		return err
+	}
+
+	return strategy.Build(ctx, app)
 }
 
 func (s *executionService) Start(ctx context.Context, appID string) (RunSession, error) {

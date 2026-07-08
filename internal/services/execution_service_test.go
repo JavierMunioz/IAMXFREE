@@ -56,6 +56,52 @@ func newExecutionServiceWithHostAndSessions(t *testing.T, strategy execution.Str
 	return services.NewExecutionService(repo, resolver, monitor.New(host), sessionRepo), app
 }
 
+func TestExecutionServiceInstall(t *testing.T) {
+	strategy := &fakeStrategy{runtime: models.RuntimeNode}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	if err := svc.Install(context.Background(), app.ID); err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+}
+
+func TestExecutionServiceInstallPropagatesStrategyError(t *testing.T) {
+	wantErr := errors.New("npm not found")
+	strategy := &fakeStrategy{runtime: models.RuntimeNode, installErr: wantErr}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	if err := svc.Install(context.Background(), app.ID); !errors.Is(err, wantErr) {
+		t.Fatalf("Install() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestExecutionServiceInstallUnknownApplication(t *testing.T) {
+	svc, _ := newExecutionServiceWithStrategy(t, &fakeStrategy{runtime: models.RuntimeNode})
+
+	if err := svc.Install(context.Background(), "does-not-exist"); err == nil {
+		t.Fatal("expected an error for an unknown application")
+	}
+}
+
+func TestExecutionServiceBuild(t *testing.T) {
+	strategy := &fakeStrategy{runtime: models.RuntimeNode}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	if err := svc.Build(context.Background(), app.ID); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+}
+
+func TestExecutionServiceBuildPropagatesStrategyError(t *testing.T) {
+	wantErr := errors.New("build script failed")
+	strategy := &fakeStrategy{runtime: models.RuntimeNode, buildErr: wantErr}
+	svc, app := newExecutionServiceWithStrategy(t, strategy)
+
+	if err := svc.Build(context.Background(), app.ID); !errors.Is(err, wantErr) {
+		t.Fatalf("Build() error = %v, want %v", err, wantErr)
+	}
+}
+
 func TestExecutionServiceStartReturnsRunSession(t *testing.T) {
 	startedAt := time.Now().UTC()
 	strategy := &fakeStrategy{

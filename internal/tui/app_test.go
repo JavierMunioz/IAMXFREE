@@ -71,6 +71,12 @@ func (f *fakeApplicationService) CheckGitStatus(context.Context, string) (servic
 
 type fakeExecutionService struct{}
 
+func (fakeExecutionService) Install(context.Context, string) error {
+	return execution.ErrNotImplemented
+}
+func (fakeExecutionService) Build(context.Context, string) error {
+	return execution.ErrNotImplemented
+}
 func (fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
 	return services.RunSession{}, execution.ErrNotImplemented
 }

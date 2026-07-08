@@ -61,6 +61,8 @@ type fakeExecutionService struct {
 	hasActiveSession bool
 }
 
+func (f *fakeExecutionService) Install(context.Context, string) error { return nil }
+func (f *fakeExecutionService) Build(context.Context, string) error   { return nil }
 func (f *fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
 	return f.startSession, f.startErr
 }
