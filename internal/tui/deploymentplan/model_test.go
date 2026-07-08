@@ -76,6 +76,7 @@ func testEngine(app *models.Application, getErr error) *deployment.Engine {
 		fakeExecutionService{},
 		git.NewManager(runtimehosttest.NewFakeHost()),
 		nginx.NewManager(runtimehosttest.NewFakeHost()),
+		runtimehosttest.NewFakeHost(),
 	)
 }
 

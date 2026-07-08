@@ -34,6 +34,7 @@ func testDeploymentEngine(appService services.ApplicationService, executionServi
 		executionService,
 		git.NewManager(runtimehosttest.NewFakeHost()),
 		nginx.NewManager(runtimehosttest.NewFakeHost()),
+		runtimehosttest.NewFakeHost(),
 	)
 }
 

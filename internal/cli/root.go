@@ -63,7 +63,7 @@ func NewRootCommand() *cobra.Command {
 			setup := services.NewApplicationSetupService(inspector, deploymentPlanner)
 
 			nginxManager := nginx.NewManager(host)
-			deploymentEngine := deployment.NewEngine(service, executionService, gitManager, nginxManager)
+			deploymentEngine := deployment.NewEngine(service, executionService, gitManager, nginxManager, host)
 
 			return tui.Run(service, executionService, setup, deploymentEngine)
 		},
