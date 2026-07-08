@@ -112,8 +112,8 @@ func TestBuildAndStartCmdReturnsStartedMsgOnSuccess(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected executionStartedMsg, got %T", msg)
 	}
-	if len(started.ops) != 6 {
-		t.Fatalf("len(ops) = %d, want 6", len(started.ops))
+	if len(started.ops) != 8 {
+		t.Fatalf("len(ops) = %d, want 8", len(started.ops))
 	}
 }
 

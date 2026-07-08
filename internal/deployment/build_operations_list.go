@@ -7,9 +7,10 @@ import (
 )
 
 // BuildOperations turns plan into the ordered, executable operations a
-// deployment needs: Fetch, Install, Build, Stop, Start, Reload Nginx —
-// each already decided Applicable or Skipped from what the analysis phase
-// found. It never runs any of them; that's operations.Executor's job.
+// deployment needs: pre-deploy hook, Fetch, Install, Build, Stop, Start,
+// Reload Nginx, post-deploy hook — each already decided Applicable or
+// Skipped from what the analysis phase found. It never runs any of them;
+// that's operations.Executor's job.
 //
 // An error here means plan.ApplicationID could not be resolved — nothing
 // else can fail at this stage, since every builder only reads plan and
@@ -21,11 +22,13 @@ func (e *Engine) BuildOperations(ctx context.Context, plan DeploymentPlan) ([]op
 	}
 
 	return []operations.Operation{
+		e.preDeployHookOperation(app, plan),
 		e.fetchOperation(app, plan),
 		e.installOperation(app, plan),
 		e.buildOperation(app, plan),
 		e.stopOperation(app),
 		e.startOperation(app),
 		e.reloadNginxOperation(plan),
+		e.postDeployHookOperation(app, plan),
 	}, nil
 }

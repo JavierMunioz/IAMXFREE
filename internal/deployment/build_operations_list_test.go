@@ -23,7 +23,7 @@ func TestBuildOperationsApplicationNotFound(t *testing.T) {
 	}
 }
 
-func TestBuildOperationsReturnsSixOperationsInOrder(t *testing.T) {
+func TestBuildOperationsReturnsOperationsInOrder(t *testing.T) {
 	app := &models.Application{ID: "app-1", Name: "my-api"}
 	engine := &Engine{
 		appService:       &fakeAppService{app: app},
@@ -37,7 +37,7 @@ func TestBuildOperationsReturnsSixOperationsInOrder(t *testing.T) {
 		t.Fatalf("BuildOperations() error = %v", err)
 	}
 
-	wantMethods := []string{"Fetch", "Install", "Build", "Stop", "Start", "Reload"}
+	wantMethods := []string{"Run", "Fetch", "Install", "Build", "Stop", "Start", "Reload", "Run"}
 	if len(ops) != len(wantMethods) {
 		t.Fatalf("len(ops) = %d, want %d", len(ops), len(wantMethods))
 	}
