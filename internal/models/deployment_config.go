@@ -21,4 +21,12 @@ type DeploymentConfig struct {
 	StartCommand   string `json:"start_command,omitempty"`
 	StopCommand    string `json:"stop_command,omitempty"`
 	RestartCommand string `json:"restart_command,omitempty"`
+
+	// PreDeployHook and PostDeployHook are optional shell commands run
+	// around a deployment: PreDeployHook right before it (e.g. notify a
+	// channel, put up a maintenance page), PostDeployHook right after it
+	// finishes successfully (e.g. warm a cache, notify a channel). Blank
+	// means no hook — never invented, only run when configured.
+	PreDeployHook  string `json:"pre_deploy_hook,omitempty"`
+	PostDeployHook string `json:"post_deploy_hook,omitempty"`
 }
