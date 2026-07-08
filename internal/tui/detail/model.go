@@ -27,6 +27,14 @@ type OpenLogsMsg struct {
 	Session services.RunSession
 }
 
+// OpenDeploymentPlanMsg signals that the user asked to review the
+// deployment plan for this application. The detail view has no notion of
+// "deployment plan screen" beyond this — whatever hosts it decides what
+// happens next.
+type OpenDeploymentPlanMsg struct {
+	AppID string
+}
+
 type appLoadedMsg struct {
 	app *models.Application
 }

@@ -44,6 +44,10 @@ func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
 
 	case "e":
 		return m.SetStatus("Editing configuration is not implemented yet."), nil
+
+	case "p":
+		appID := m.appID
+		return m, func() tea.Msg { return OpenDeploymentPlanMsg{AppID: appID} }
 	}
 
 	return m, nil
