@@ -29,23 +29,46 @@ func (m Model) View() string {
 	return strings.Join(sections, "\n")
 }
 
+// renderHeader shows the run's phase — Executing, Failed, Compensating or
+// Finished — so the user always understands what's happening at a glance,
+// distinct from any single operation's own state.
 func (m Model) renderHeader() string {
-	status := mutedStyle.Render("Running…")
-	if m.finished {
-		status = mutedStyle.Render("Finished.")
+	phase := currentPhase(m.results, m.finished)
+
+	var status string
+	switch phase {
+	case phaseFailed:
+		status = lipgloss.NewStyle().Foreground(colorCritical).Render(string(phaseFailed))
+	case phaseCompensating:
+		status = lipgloss.NewStyle().Foreground(colorWarning).Render(string(phaseCompensating) + "…")
+	case phaseFinished:
+		status = mutedStyle.Render(string(phaseFinished) + ".")
+	default:
+		status = mutedStyle.Render(string(phaseExecuting) + "…")
 	}
+
 	return accentStyle.Render(fmt.Sprintf("Deploying — %s", m.plan.ApplicationName)) + "  " + status + "\n"
 }
 
-// renderOperationRow shows one operation's identity and current state —
-// this is what lets a user see the current step, every completed step,
-// and the step in progress, all in one always-visible list.
+// renderOperationRow shows one operation's identity, current state, and —
+// if a compensation was attempted — its compensation state too. This is
+// what lets a user see the current step, every completed step, and the
+// step in progress, all in one always-visible list.
 func renderOperationRow(result operations.OperationResult) string {
 	icon, color := operationStatePresentation(result.State)
 	line := lipgloss.NewStyle().Foreground(color).Render(fmt.Sprintf("%s %s", icon, result.Name))
 	if result.Message != "" {
 		line += mutedStyle.Render(" — " + result.Message)
 	}
+
+	if result.Compensation != nil {
+		compIcon, compColor := operationStatePresentation(result.Compensation.State)
+		line += "\n  " + lipgloss.NewStyle().Foreground(compColor).Render(fmt.Sprintf("%s compensation", compIcon))
+		if result.Compensation.Message != "" {
+			line += mutedStyle.Render(" — " + result.Compensation.Message)
+		}
+	}
+
 	return line
 }
 
@@ -62,7 +85,7 @@ func (m Model) renderSummary() string {
 	}
 
 	return "\n" + verdict + "\n" + mutedStyle.Render(fmt.Sprintf(
-		"%d succeeded · %d failed · %d skipped · %d cancelled",
-		summary.Succeeded, summary.Failed, summary.Skipped, summary.Cancelled,
+		"%d succeeded · %d failed · %d skipped · %d cancelled · %d compensated · %d compensation failed",
+		summary.Succeeded, summary.Failed, summary.Skipped, summary.Cancelled, summary.Compensated, summary.CompensationFailed,
 	))
 }

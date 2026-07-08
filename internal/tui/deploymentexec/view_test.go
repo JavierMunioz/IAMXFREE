@@ -71,3 +71,43 @@ func TestViewShowsFailedSummary(t *testing.T) {
 		t.Fatalf("expected a failed verdict, got:\n%s", m.View())
 	}
 }
+
+func TestViewShowsHeaderPhase(t *testing.T) {
+	m := New(testEngine(&models.Application{}, nil), deployment.DeploymentPlan{ApplicationName: "my-api"})
+	m.started = true
+	m.results = []operations.OperationResult{{Name: "one", State: operations.StateSuccess}}
+
+	if !strings.Contains(m.View(), "Executing") {
+		t.Fatalf("expected an Executing phase indicator, got:\n%s", m.View())
+	}
+
+	m.results = []operations.OperationResult{{Name: "one", State: operations.StateFailed}}
+	if !strings.Contains(m.View(), "Failed") {
+		t.Fatalf("expected a Failed phase indicator, got:\n%s", m.View())
+	}
+
+	m.results = []operations.OperationResult{
+		{Name: "stop", State: operations.StateSuccess, Compensation: &operations.CompensationResult{State: operations.StateCompensating}},
+		{Name: "fail", State: operations.StateFailed},
+	}
+	if !strings.Contains(m.View(), "Compensating") {
+		t.Fatalf("expected a Compensating phase indicator, got:\n%s", m.View())
+	}
+}
+
+func TestViewShowsCompensationRow(t *testing.T) {
+	m := New(testEngine(&models.Application{}, nil), deployment.DeploymentPlan{ApplicationName: "my-api"})
+	m.started = true
+	m.finished = true
+	m.results = []operations.OperationResult{
+		{Name: "Stop application", State: operations.StateSuccess, Compensation: &operations.CompensationResult{
+			State: operations.StateCompensated, Message: "compensated successfully",
+		}},
+		{Name: "Reload Nginx", State: operations.StateFailed},
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "compensation") || !strings.Contains(view, "compensated successfully") {
+		t.Fatalf("expected the compensation row to be shown, got:\n%s", view)
+	}
+}
