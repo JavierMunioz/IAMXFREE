@@ -17,5 +17,13 @@ type VirtualHost struct {
 // FileName is the config file name this VirtualHost is stored under inside
 // a Server's SitesAvailableDir (e.g. "example.com.conf").
 func (v VirtualHost) FileName() string {
-	return v.ServerName + ".conf"
+	return siteFileName(v.ServerName)
+}
+
+// siteFileName is the config file name a site is stored under, given its
+// ServerName. VirtualHost.FileName and every Manager operation that only
+// has a ServerName (Delete, List) derive the file name through this one
+// function, so the naming rule can never drift between them.
+func siteFileName(serverName string) string {
+	return serverName + ".conf"
 }
