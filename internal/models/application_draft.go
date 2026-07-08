@@ -21,6 +21,9 @@ type ApplicationDraft struct {
 	InstallCommand string
 	BuildCommand   string
 	StartCommand   string
+
+	PreDeployHook  string
+	PostDeployHook string
 }
 
 // ToApplication converts the draft into a persistable Application. This is
@@ -40,6 +43,8 @@ func (d ApplicationDraft) ToApplication() *Application {
 		InstallCommand: d.InstallCommand,
 		BuildCommand:   d.BuildCommand,
 		StartCommand:   d.StartCommand,
+		PreDeployHook:  d.PreDeployHook,
+		PostDeployHook: d.PostDeployHook,
 	}
 	return app
 }
