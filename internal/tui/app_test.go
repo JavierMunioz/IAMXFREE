@@ -47,6 +47,9 @@ func (f *fakeApplicationService) ResolveExecutionStrategy(context.Context, strin
 func (f *fakeApplicationService) CheckExecutionHealth(context.Context, string) (services.ExecutionHealth, error) {
 	return services.ExecutionHealth{}, execution.ErrNoStrategyFound
 }
+func (f *fakeApplicationService) CheckGitStatus(context.Context, string) (services.GitStatus, error) {
+	return services.GitStatus{}, nil
+}
 
 type fakeExecutionService struct{}
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
+	"github.com/JavierMunioz/IAMXFREE/internal/git"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories"
 )
@@ -15,16 +17,17 @@ import (
 var ErrApplicationNameTaken = errors.New("application name is already taken")
 
 type applicationService struct {
-	repo     repositories.ApplicationRepository
-	resolver *execution.Resolver
+	repo       repositories.ApplicationRepository
+	resolver   *execution.Resolver
+	gitManager *git.Manager
 }
 
 // NewApplicationService builds the default ApplicationService, backed by
-// repo and resolver. Swapping repo's concrete implementation (JSON,
-// SQLite, ...) never requires changing this type, and neither does
+// repo, resolver and gitManager. Swapping repo's concrete implementation
+// (JSON, SQLite, ...) never requires changing this type, and neither does
 // registering a new execution.Strategy with resolver.
-func NewApplicationService(repo repositories.ApplicationRepository, resolver *execution.Resolver) ApplicationService {
-	return &applicationService{repo: repo, resolver: resolver}
+func NewApplicationService(repo repositories.ApplicationRepository, resolver *execution.Resolver, gitManager *git.Manager) ApplicationService {
+	return &applicationService{repo: repo, resolver: resolver, gitManager: gitManager}
 }
 
 func (s *applicationService) Register(ctx context.Context, app *models.Application) error {
@@ -121,4 +124,42 @@ func (s *applicationService) CheckExecutionHealth(ctx context.Context, id string
 		StrategyName: strategy.Metadata().Name,
 		Healthy:      health.Healthy(),
 	}, nil
+}
+
+func (s *applicationService) CheckGitStatus(ctx context.Context, id string) (GitStatus, error) {
+	app, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return GitStatus{}, err
+	}
+
+	if strings.TrimSpace(app.Source.LocalPath) == "" {
+		return GitStatus{}, nil
+	}
+
+	repo, err := s.gitManager.Inspect(ctx, app.Source.LocalPath)
+	if err != nil {
+		return GitStatus{}, err
+	}
+	if !repo.IsRepo {
+		return GitStatus{}, nil
+	}
+
+	status := GitStatus{
+		IsRepo:        true,
+		Branch:        repo.Branch.Name,
+		Detached:      repo.Branch.Detached,
+		CommitSHA:     repo.Commit.ShortSHA,
+		CommitMessage: repo.Commit.Message,
+		Clean:         repo.Status.WorkingTree.Clean,
+		Modified:      len(repo.Status.WorkingTree.Modified),
+		Untracked:     len(repo.Status.WorkingTree.Untracked),
+		Ahead:         repo.Status.Ahead,
+		Behind:        repo.Status.Behind,
+	}
+	if len(repo.Remotes) > 0 {
+		status.RemoteName = repo.Remotes[0].Name
+		status.RemoteURL = repo.Remotes[0].URL
+	}
+
+	return status, nil
 }

@@ -17,6 +17,7 @@ type fakeService struct {
 	apps    []*models.Application
 	listErr error
 	health  map[string]services.ExecutionHealth
+	git     map[string]services.GitStatus
 }
 
 func (f *fakeService) Register(context.Context, *models.Application) error { return nil }
@@ -42,6 +43,9 @@ func (f *fakeService) CheckExecutionHealth(_ context.Context, id string) (servic
 		return services.ExecutionHealth{}, execution.ErrNoStrategyFound
 	}
 	return health, nil
+}
+func (f *fakeService) CheckGitStatus(_ context.Context, id string) (services.GitStatus, error) {
+	return f.git[id], nil
 }
 
 func newApp(name string, createdAt time.Time) *models.Application {

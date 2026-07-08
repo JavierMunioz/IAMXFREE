@@ -6,6 +6,7 @@ package cli
 import (
 	"github.com/JavierMunioz/IAMXFREE/internal/config"
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
+	"github.com/JavierMunioz/IAMXFREE/internal/git"
 	"github.com/JavierMunioz/IAMXFREE/internal/inspection"
 	"github.com/JavierMunioz/IAMXFREE/internal/monitor"
 	"github.com/JavierMunioz/IAMXFREE/internal/planner"
@@ -50,7 +51,8 @@ func NewRootCommand() *cobra.Command {
 			executionRegistry.Register(execution.NewNodeStrategy(host))
 			resolver := execution.NewResolver(executionRegistry)
 
-			service := services.NewApplicationService(repo, resolver)
+			gitManager := git.NewManager(host)
+			service := services.NewApplicationService(repo, resolver, gitManager)
 			runtimeMonitor := monitor.New(host)
 			executionService := services.NewExecutionService(repo, resolver, runtimeMonitor, sessionRepo)
 

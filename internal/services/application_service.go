@@ -31,6 +31,14 @@ type ApplicationService interface {
 	// display (e.g. on a dashboard card) without exposing execution types
 	// to callers.
 	CheckExecutionHealth(ctx context.Context, id string) (ExecutionHealth, error)
+
+	// CheckGitStatus inspects the application's source directory
+	// (Source.LocalPath) for a Git repository, summarizing its state for
+	// display (e.g. on a dashboard card or a detail panel) without
+	// exposing git types to callers. IsRepo == false is a normal outcome
+	// — no repository configured, or the directory isn't one — never an
+	// error by itself.
+	CheckGitStatus(ctx context.Context, id string) (GitStatus, error)
 }
 
 // ExecutionHealth summarizes how an application would be managed and
@@ -38,4 +46,25 @@ type ApplicationService interface {
 type ExecutionHealth struct {
 	StrategyName string
 	Healthy      bool
+}
+
+// GitStatus summarizes an application's Git repository state. Every field
+// besides IsRepo is zero-valued when IsRepo is false.
+type GitStatus struct {
+	IsRepo bool
+
+	Branch   string
+	Detached bool
+
+	CommitSHA     string
+	CommitMessage string
+
+	Clean     bool
+	Modified  int
+	Untracked int
+	Ahead     int
+	Behind    int
+
+	RemoteName string
+	RemoteURL  string
 }

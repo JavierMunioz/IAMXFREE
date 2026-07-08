@@ -6,8 +6,11 @@ import (
 	"testing"
 
 	"github.com/JavierMunioz/IAMXFREE/internal/execution"
+	"github.com/JavierMunioz/IAMXFREE/internal/git"
 	"github.com/JavierMunioz/IAMXFREE/internal/models"
 	"github.com/JavierMunioz/IAMXFREE/internal/repositories/jsonstore"
+	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost"
+	"github.com/JavierMunioz/IAMXFREE/internal/runtimehost/runtimehosttest"
 	"github.com/JavierMunioz/IAMXFREE/internal/services"
 )
 
@@ -22,7 +25,8 @@ func newServiceWithResolver(t *testing.T, resolver *execution.Resolver) services
 	if err != nil {
 		t.Fatalf("NewApplicationRepository() error = %v", err)
 	}
-	return services.NewApplicationService(repo, resolver)
+	gitManager := git.NewManager(runtimehosttest.NewFakeHost())
+	return services.NewApplicationService(repo, resolver, gitManager)
 }
 
 // fakeStrategy is a minimal execution.Strategy used to test
@@ -303,5 +307,77 @@ func TestApplicationServiceCheckExecutionHealthNoStrategy(t *testing.T) {
 
 	if _, err := svc.CheckExecutionHealth(ctx, app.ID); !errors.Is(err, execution.ErrNoStrategyFound) {
 		t.Fatalf("CheckExecutionHealth() error = %v, want %v", err, execution.ErrNoStrategyFound)
+	}
+}
+
+func TestApplicationServiceCheckGitStatusNoLocalPath(t *testing.T) {
+	ctx := context.Background()
+	svc := newService(t)
+
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	if err := svc.Register(ctx, app); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	status, err := svc.CheckGitStatus(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("CheckGitStatus() error = %v", err)
+	}
+	if status.IsRepo {
+		t.Error("expected IsRepo = false when the application has no LocalPath configured")
+	}
+}
+
+func TestApplicationServiceCheckGitStatusRepository(t *testing.T) {
+	ctx := context.Background()
+
+	repo, err := jsonstore.NewApplicationRepository(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewApplicationRepository() error = %v", err)
+	}
+	host := runtimehosttest.NewFakeHost().
+		WithRunResult("git", []string{"rev-parse", "--is-inside-work-tree"},
+			runtimehost.CommandResult{ExitCode: 0, Stdout: "true\n"}, nil).
+		WithRunResult("git", []string{"rev-parse", "--abbrev-ref", "HEAD"},
+			runtimehost.CommandResult{ExitCode: 0, Stdout: "main\n"}, nil).
+		WithRunResult("git", []string{"log", "-1", "--format=%H\x1f%h\x1f%s\x1f%an\x1f%aI"},
+			runtimehost.CommandResult{ExitCode: 0, Stdout: "abc123\x1fabc\x1fInitial\x1fJavier\x1f2026-07-07T10:00:00-05:00\n"}, nil).
+		WithRunResult("git", []string{"remote", "-v"},
+			runtimehost.CommandResult{ExitCode: 0, Stdout: "origin\thttps://github.com/user/repo.git (fetch)\n"}, nil).
+		WithRunResult("git", []string{"status", "--porcelain=v1"},
+			runtimehost.CommandResult{ExitCode: 0, Stdout: " M src/main.go\n"}, nil).
+		WithRunResult("git", []string{"rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"},
+			runtimehost.CommandResult{ExitCode: 128},
+			&runtimehost.ExecutionError{Command: "git", ExitCode: 128, Err: errors.New("exit status 128")},
+		)
+	svc := services.NewApplicationService(repo, execution.NewResolver(execution.NewRegistry()), git.NewManager(host))
+
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	app.Source.LocalPath = "/srv/apps/my-api"
+	if err := svc.Register(ctx, app); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	status, err := svc.CheckGitStatus(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("CheckGitStatus() error = %v", err)
+	}
+	if !status.IsRepo {
+		t.Fatal("expected IsRepo = true")
+	}
+	if status.Branch != "main" {
+		t.Errorf("Branch = %q, want %q", status.Branch, "main")
+	}
+	if status.CommitSHA != "abc" {
+		t.Errorf("CommitSHA = %q, want %q", status.CommitSHA, "abc")
+	}
+	if status.Clean {
+		t.Error("expected Clean = false (one modified file)")
+	}
+	if status.Modified != 1 {
+		t.Errorf("Modified = %d, want 1", status.Modified)
+	}
+	if status.RemoteName != "origin" {
+		t.Errorf("RemoteName = %q, want %q", status.RemoteName, "origin")
 	}
 }

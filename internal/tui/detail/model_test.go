@@ -19,6 +19,8 @@ type fakeAppService struct {
 	getErr    error
 	health    services.ExecutionHealth
 	healthErr error
+	git       services.GitStatus
+	gitErr    error
 }
 
 func (f *fakeAppService) Register(context.Context, *models.Application) error { return nil }
@@ -35,6 +37,9 @@ func (f *fakeAppService) ChangeStatus(context.Context, string, models.Applicatio
 func (f *fakeAppService) Remove(context.Context, string) error { return nil }
 func (f *fakeAppService) ResolveExecutionStrategy(context.Context, string) (execution.Metadata, error) {
 	return execution.Metadata{}, execution.ErrNoStrategyFound
+}
+func (f *fakeAppService) CheckGitStatus(context.Context, string) (services.GitStatus, error) {
+	return f.git, f.gitErr
 }
 func (f *fakeAppService) CheckExecutionHealth(context.Context, string) (services.ExecutionHealth, error) {
 	return f.health, f.healthErr
