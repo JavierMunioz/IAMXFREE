@@ -60,6 +60,10 @@ type fakeExecutionService struct {
 
 	activeSession    services.RunSession
 	hasActiveSession bool
+
+	candidateSession    services.RunSession
+	hasCandidateSession bool
+	promoteErr          error
 }
 
 func (f *fakeExecutionService) Install(context.Context, string) error { return nil }
@@ -81,6 +85,24 @@ func (f *fakeExecutionService) Snapshot(context.Context, services.RunSession) (s
 }
 func (f *fakeExecutionService) ActiveSession(string) (services.RunSession, bool) {
 	return f.activeSession, f.hasActiveSession
+}
+func (f *fakeExecutionService) StartCandidate(context.Context, string, int) (services.RunSession, error) {
+	return services.RunSession{}, nil
+}
+func (f *fakeExecutionService) CandidateSession(string) (services.RunSession, bool) {
+	return f.candidateSession, f.hasCandidateSession
+}
+func (f *fakeExecutionService) StopCandidate(context.Context, string, services.RunSession) error {
+	return nil
+}
+func (f *fakeExecutionService) PromoteCandidate(context.Context, string) error {
+	return f.promoteErr
+}
+func (f *fakeExecutionService) CheckStatus(context.Context, string, services.RunSession) (services.RunSession, error) {
+	return services.RunSession{}, nil
+}
+func (f *fakeExecutionService) StopSession(context.Context, string, services.RunSession) error {
+	return nil
 }
 
 func newTestApp() *models.Application {

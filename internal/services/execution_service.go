@@ -56,6 +56,47 @@ type ExecutionService interface {
 	// other than the one that started a session (e.g. the dashboard) know
 	// one exists.
 	ActiveSession(appID string) (RunSession, bool)
+
+	// StartCandidate starts a second, independent session of appID on
+	// port, alongside whatever ActiveSession already tracks — the new
+	// session a zero-downtime deployment health-checks before switching
+	// traffic to it. It never touches the active session or the
+	// application's Status: as far as the rest of IAMXFREE is concerned,
+	// the application is still running exactly as it was.
+	StartCandidate(ctx context.Context, appID string, port int) (RunSession, error)
+
+	// CandidateSession reports the session started by StartCandidate for
+	// appID, if one is still tracked (it stops being tracked once
+	// PromoteCandidate or StopCandidate removes it). Like ActiveSession,
+	// this performs no I/O.
+	CandidateSession(appID string) (RunSession, bool)
+
+	// StopCandidate stops appID's tracked candidate session and forgets
+	// it — used when a zero-downtime candidate fails its health check and
+	// the deployment aborts before ever touching Nginx, leaving the
+	// previously active session as the one still serving traffic.
+	StopCandidate(ctx context.Context, appID string, session RunSession) error
+
+	// PromoteCandidate makes appID's tracked candidate session the new
+	// active one — the in-memory/persisted bookkeeping side of a
+	// zero-downtime cutover, once Nginx has already been switched over to
+	// it. It returns an error if no candidate session is tracked.
+	PromoteCandidate(ctx context.Context, appID string) error
+
+	// CheckStatus re-checks whether session's process is still alive,
+	// the same way RefreshSession does, but without updating anything
+	// ExecutionService tracks — for observing a session (e.g. a
+	// zero-downtime candidate, mid health-check) without disturbing
+	// whatever ActiveSession/CandidateSession already report.
+	CheckStatus(ctx context.Context, appID string, session RunSession) (RunSession, error)
+
+	// StopSession stops session directly via its strategy, the same way
+	// Stop does, but without touching ExecutionService's tracked registry
+	// at all — for stopping a session the caller is already tracking on
+	// its own terms (e.g. the previous active session during a
+	// zero-downtime cutover, after PromoteCandidate has already replaced
+	// it in the registry).
+	StopSession(ctx context.Context, appID string, session RunSession) error
 }
 
 type executionService struct {

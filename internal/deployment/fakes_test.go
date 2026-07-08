@@ -54,6 +54,26 @@ type fakeExecutionService struct {
 	startErr     error
 	stopErr      error
 	stoppedWith  services.RunSession
+
+	startCandidateFn      func(ctx context.Context, appID string, port int) (services.RunSession, error)
+	startCandidateSession services.RunSession
+	startCandidateErr     error
+
+	candidateSession services.RunSession
+	hasCandidate     bool
+
+	stopCandidateErr     error
+	stoppedCandidateWith services.RunSession
+
+	promoteErr error
+	promoted   bool
+
+	checkStatusFn      func(ctx context.Context, appID string, session services.RunSession) (services.RunSession, error)
+	checkStatusSession services.RunSession
+	checkStatusErr     error
+
+	stopSessionErr     error
+	stoppedSessionWith services.RunSession
 }
 
 func (f *fakeExecutionService) Install(ctx context.Context, appID string) error {
@@ -89,4 +109,31 @@ func (f *fakeExecutionService) Snapshot(context.Context, services.RunSession) (s
 }
 func (f *fakeExecutionService) ActiveSession(string) (services.RunSession, bool) {
 	return f.session, f.running
+}
+func (f *fakeExecutionService) StartCandidate(ctx context.Context, appID string, port int) (services.RunSession, error) {
+	if f.startCandidateFn != nil {
+		return f.startCandidateFn(ctx, appID, port)
+	}
+	return f.startCandidateSession, f.startCandidateErr
+}
+func (f *fakeExecutionService) CandidateSession(string) (services.RunSession, bool) {
+	return f.candidateSession, f.hasCandidate
+}
+func (f *fakeExecutionService) StopCandidate(_ context.Context, _ string, session services.RunSession) error {
+	f.stoppedCandidateWith = session
+	return f.stopCandidateErr
+}
+func (f *fakeExecutionService) PromoteCandidate(context.Context, string) error {
+	f.promoted = true
+	return f.promoteErr
+}
+func (f *fakeExecutionService) CheckStatus(ctx context.Context, appID string, session services.RunSession) (services.RunSession, error) {
+	if f.checkStatusFn != nil {
+		return f.checkStatusFn(ctx, appID, session)
+	}
+	return f.checkStatusSession, f.checkStatusErr
+}
+func (f *fakeExecutionService) StopSession(_ context.Context, _ string, session services.RunSession) error {
+	f.stoppedSessionWith = session
+	return f.stopSessionErr
 }

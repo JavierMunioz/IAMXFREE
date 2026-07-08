@@ -67,6 +67,22 @@ func (fakeExecutionService) Snapshot(context.Context, services.RunSession) (serv
 func (fakeExecutionService) ActiveSession(string) (services.RunSession, bool) {
 	return services.RunSession{}, false
 }
+func (fakeExecutionService) StartCandidate(context.Context, string, int) (services.RunSession, error) {
+	return services.RunSession{}, nil
+}
+func (fakeExecutionService) CandidateSession(string) (services.RunSession, bool) {
+	return services.RunSession{}, false
+}
+func (fakeExecutionService) StopCandidate(context.Context, string, services.RunSession) error {
+	return nil
+}
+func (fakeExecutionService) PromoteCandidate(context.Context, string) error { return nil }
+func (fakeExecutionService) CheckStatus(context.Context, string, services.RunSession) (services.RunSession, error) {
+	return services.RunSession{}, nil
+}
+func (fakeExecutionService) StopSession(context.Context, string, services.RunSession) error {
+	return nil
+}
 
 func testEngine(app *models.Application, getErr error) *deployment.Engine {
 	return deployment.NewEngine(

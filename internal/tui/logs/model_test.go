@@ -35,6 +35,22 @@ func (f *fakeExecutionService) Snapshot(context.Context, services.RunSession) (s
 func (f *fakeExecutionService) ActiveSession(string) (services.RunSession, bool) {
 	return services.RunSession{}, false
 }
+func (f *fakeExecutionService) StartCandidate(context.Context, string, int) (services.RunSession, error) {
+	return services.RunSession{}, nil
+}
+func (f *fakeExecutionService) CandidateSession(string) (services.RunSession, bool) {
+	return services.RunSession{}, false
+}
+func (f *fakeExecutionService) StopCandidate(context.Context, string, services.RunSession) error {
+	return nil
+}
+func (f *fakeExecutionService) PromoteCandidate(context.Context, string) error { return nil }
+func (f *fakeExecutionService) CheckStatus(context.Context, string, services.RunSession) (services.RunSession, error) {
+	return services.RunSession{}, nil
+}
+func (f *fakeExecutionService) StopSession(context.Context, string, services.RunSession) error {
+	return nil
+}
 
 // fakeLogStream is a minimal services.LogStream test double, replaying a
 // fixed slice of events and then closing.

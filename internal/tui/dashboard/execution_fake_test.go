@@ -30,3 +30,19 @@ func (f *fakeExecutionService) ActiveSession(appID string) (services.RunSession,
 	session, ok := f.sessionByID[appID]
 	return session, ok
 }
+func (f *fakeExecutionService) StartCandidate(context.Context, string, int) (services.RunSession, error) {
+	return services.RunSession{}, nil
+}
+func (f *fakeExecutionService) CandidateSession(string) (services.RunSession, bool) {
+	return services.RunSession{}, false
+}
+func (f *fakeExecutionService) StopCandidate(context.Context, string, services.RunSession) error {
+	return nil
+}
+func (f *fakeExecutionService) PromoteCandidate(context.Context, string) error { return nil }
+func (f *fakeExecutionService) CheckStatus(context.Context, string, services.RunSession) (services.RunSession, error) {
+	return services.RunSession{}, nil
+}
+func (f *fakeExecutionService) StopSession(context.Context, string, services.RunSession) error {
+	return nil
+}
