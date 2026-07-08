@@ -12,6 +12,10 @@ func applicableOp(name string, run func(ctx context.Context) error) operations.O
 	return operations.Operation{Name: name, Component: "test", Method: name, Applicable: true, Run: run}
 }
 
+func compensableOp(name string, run, compensate func(ctx context.Context) error) operations.Operation {
+	return operations.Operation{Name: name, Component: "test", Method: name, Applicable: true, Run: run, Compensate: compensate}
+}
+
 func succeed(context.Context) error { return nil }
 
 func TestExecuteAllSucceed(t *testing.T) {
@@ -123,5 +127,104 @@ func TestExecuteSkippedEmitsOnlyOneProgressUpdate(t *testing.T) {
 
 	if updates != 1 {
 		t.Fatalf("updates = %d, want 1 (no Running phase for a skipped operation)", updates)
+	}
+}
+
+func TestExecuteCompensatesSuccessfulOperationsOnFailure(t *testing.T) {
+	var compensated bool
+	ops := []operations.Operation{
+		compensableOp("stop", succeed, func(context.Context) error { compensated = true; return nil }),
+		applicableOp("fail", func(context.Context) error { return errors.New("boom") }),
+	}
+
+	summary := operations.NewExecutor().Execute(context.Background(), ops, nil)
+
+	if !compensated {
+		t.Fatal("expected the compensation to run")
+	}
+	if summary.Operations[0].State != operations.StateSuccess {
+		t.Fatalf("Operations[0].State = %q, want %q (compensation never changes the original State)", summary.Operations[0].State, operations.StateSuccess)
+	}
+	if summary.Operations[0].Compensation == nil || summary.Operations[0].Compensation.State != operations.StateCompensated {
+		t.Fatalf("Operations[0].Compensation = %+v, want StateCompensated", summary.Operations[0].Compensation)
+	}
+	if summary.Compensated != 1 {
+		t.Fatalf("Compensated = %d, want 1", summary.Compensated)
+	}
+	if summary.Overall != operations.StateFailed {
+		t.Fatalf("Overall = %q, want %q (a compensated failure is still a failure)", summary.Overall, operations.StateFailed)
+	}
+}
+
+func TestExecuteSkipsCompensationForOperationsWithoutOne(t *testing.T) {
+	ops := []operations.Operation{
+		applicableOp("build", succeed), // no Compensate — Build may not need one
+		applicableOp("fail", func(context.Context) error { return errors.New("boom") }),
+	}
+
+	summary := operations.NewExecutor().Execute(context.Background(), ops, nil)
+
+	if summary.Operations[0].Compensation != nil {
+		t.Fatalf("Operations[0].Compensation = %+v, want nil (no Compensate defined)", summary.Operations[0].Compensation)
+	}
+	if summary.Compensated != 0 {
+		t.Fatalf("Compensated = %d, want 0", summary.Compensated)
+	}
+}
+
+func TestExecuteCompensatesInReverseOrder(t *testing.T) {
+	var order []string
+	ops := []operations.Operation{
+		compensableOp("first", succeed, func(context.Context) error { order = append(order, "first"); return nil }),
+		compensableOp("second", succeed, func(context.Context) error { order = append(order, "second"); return nil }),
+		applicableOp("fail", func(context.Context) error { return errors.New("boom") }),
+	}
+
+	operations.NewExecutor().Execute(context.Background(), ops, nil)
+
+	if len(order) != 2 || order[0] != "second" || order[1] != "first" {
+		t.Fatalf("compensation order = %v, want [second first]", order)
+	}
+}
+
+func TestExecuteRecordsCompensationFailureWithoutStoppingEarlierCompensations(t *testing.T) {
+	var firstCompensated bool
+	ops := []operations.Operation{
+		compensableOp("first", succeed, func(context.Context) error { firstCompensated = true; return nil }),
+		compensableOp("second", succeed, func(context.Context) error { return errors.New("cannot undo") }),
+		applicableOp("fail", func(context.Context) error { return errors.New("boom") }),
+	}
+
+	summary := operations.NewExecutor().Execute(context.Background(), ops, nil)
+
+	if !firstCompensated {
+		t.Fatal("expected the earlier operation to still be compensated despite a later compensation failing")
+	}
+	if summary.Operations[1].Compensation == nil || summary.Operations[1].Compensation.State != operations.StateCompensationFailed {
+		t.Fatalf("Operations[1].Compensation = %+v, want StateCompensationFailed", summary.Operations[1].Compensation)
+	}
+	if summary.Operations[1].Compensation.Err == nil {
+		t.Fatal("expected a CompensationResult.Err explaining the failure")
+	}
+	if summary.CompensationFailed != 1 || summary.Compensated != 1 {
+		t.Fatalf("CompensationFailed = %d, Compensated = %d, want 1 and 1", summary.CompensationFailed, summary.Compensated)
+	}
+}
+
+func TestExecuteEmitsCompensatingThenTerminalProgress(t *testing.T) {
+	ops := []operations.Operation{
+		compensableOp("stop", succeed, succeed),
+		applicableOp("fail", func(context.Context) error { return errors.New("boom") }),
+	}
+
+	var compensationStates []operations.OperationState
+	operations.NewExecutor().Execute(context.Background(), ops, func(p operations.OperationProgress) {
+		if p.Index == 0 && p.Result.Compensation != nil {
+			compensationStates = append(compensationStates, p.Result.Compensation.State)
+		}
+	})
+
+	if len(compensationStates) != 2 || compensationStates[0] != operations.StateCompensating || compensationStates[1] != operations.StateCompensated {
+		t.Fatalf("compensation progress states = %v, want [compensating compensated]", compensationStates)
 	}
 }

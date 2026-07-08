@@ -24,10 +24,17 @@ func NewExecutor() *Executor {
 // reported Skipped without ever calling Run. If ctx is already cancelled
 // when Execute reaches an Operation, that Operation and everything after
 // it is reported Cancelled instead.
+//
+// After a failure, Execute walks every Success operation that ran before
+// it in reverse order and, for each one with a Compensate, runs it —
+// recording the outcome on that operation's Compensation rather than
+// touching its original State. An operation with no Compensate is simply
+// left alone; not every operation is reversible.
 func (e *Executor) Execute(ctx context.Context, ops []Operation, onProgress func(OperationProgress)) ExecutionSummary {
 	started := time.Now().UTC()
 	results := make([]OperationResult, len(ops))
 	halted := false
+	failedAt := -1
 
 	for i, op := range ops {
 		var result OperationResult
@@ -50,6 +57,7 @@ func (e *Executor) Execute(ctx context.Context, ops []Operation, onProgress func
 			result = e.run(ctx, op)
 			if result.State == StateFailed {
 				halted = true
+				failedAt = i
 			}
 		}
 
@@ -59,7 +67,50 @@ func (e *Executor) Execute(ctx context.Context, ops []Operation, onProgress func
 		}
 	}
 
+	if failedAt >= 0 {
+		e.compensate(ctx, ops, results, failedAt, onProgress)
+	}
+
 	return Summarize(started, results)
+}
+
+// compensate walks results[:failedAt] in reverse order — undoing the most
+// recent success first — running Compensate for every Success operation
+// that has one. It never stops early on a CompensationFailed: recovering
+// as much as possible matters more than an all-or-nothing rollback, and
+// every failure is still recorded, never hidden.
+func (e *Executor) compensate(ctx context.Context, ops []Operation, results []OperationResult, failedAt int, onProgress func(OperationProgress)) {
+	for i := failedAt - 1; i >= 0; i-- {
+		if results[i].State != StateSuccess || ops[i].Compensate == nil {
+			continue
+		}
+		op := ops[i]
+
+		if onProgress != nil {
+			compensating := results[i]
+			compensating.Compensation = &CompensationResult{State: StateCompensating}
+			onProgress(OperationProgress{Index: i, Total: len(ops), Result: compensating})
+		}
+
+		start := time.Now().UTC()
+		err := op.Compensate(ctx)
+		finish := time.Now().UTC()
+
+		comp := &CompensationResult{StartedAt: start, FinishedAt: finish}
+		if err != nil {
+			comp.State = StateCompensationFailed
+			comp.Message = err.Error()
+			comp.Err = &OperationError{Message: op.Name + " compensation failed", Cause: err}
+		} else {
+			comp.State = StateCompensated
+			comp.Message = "compensated successfully"
+		}
+
+		results[i].Compensation = comp
+		if onProgress != nil {
+			onProgress(OperationProgress{Index: i, Total: len(ops), Result: results[i]})
+		}
+	}
 }
 
 // run calls op.Run and turns its outcome into a terminal OperationResult.
@@ -113,6 +164,15 @@ func Summarize(started time.Time, results []OperationResult) ExecutionSummary {
 			summary.Skipped++
 		case StateCancelled:
 			summary.Cancelled++
+		}
+
+		if r.Compensation != nil {
+			switch r.Compensation.State {
+			case StateCompensated:
+				summary.Compensated++
+			case StateCompensationFailed:
+				summary.CompensationFailed++
+			}
 		}
 	}
 
