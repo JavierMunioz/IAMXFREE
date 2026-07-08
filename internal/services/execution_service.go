@@ -207,7 +207,7 @@ func (s *executionService) Start(ctx context.Context, appID string) (RunSession,
 		return RunSession{}, err
 	}
 
-	session, err := strategy.Start(ctx, app)
+	session, err := strategy.Start(ctx, app, app.Config.InternalPort)
 	if err != nil {
 		return RunSession{}, err
 	}

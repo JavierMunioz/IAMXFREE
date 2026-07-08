@@ -68,9 +68,12 @@ type Strategy interface {
 	Install(ctx context.Context, app *models.Application) error
 	Build(ctx context.Context, app *models.Application) error
 
-	// Start runs app's configured start command and returns a Session
-	// describing the resulting process.
-	Start(ctx context.Context, app *models.Application) (Session, error)
+	// Start runs app's configured start command on port and returns a
+	// Session describing the resulting process. port lets a caller run a
+	// second, independent instance of the same application on a different
+	// port than its usual one (e.g. a zero-downtime deployment's candidate
+	// session) — a plain Start still passes app.Config.InternalPort.
+	Start(ctx context.Context, app *models.Application, port int) (Session, error)
 
 	// Stop terminates the process described by session.
 	Stop(ctx context.Context, app *models.Application, session Session) error

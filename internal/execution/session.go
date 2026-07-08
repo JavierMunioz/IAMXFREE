@@ -20,4 +20,10 @@ type Session struct {
 	WorkingDir string
 	Status     Status
 	Runtime    models.Runtime
+
+	// Port is the port this session was told to listen on when started
+	// (see Strategy.Start). Zero for a session started before this field
+	// existed — callers that need a port fall back to the application's
+	// configured port in that case.
+	Port int
 }

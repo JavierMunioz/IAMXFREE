@@ -65,7 +65,7 @@ func (s *fakeStrategy) Install(context.Context, *models.Application) error {
 func (s *fakeStrategy) Build(context.Context, *models.Application) error {
 	return s.buildErr
 }
-func (s *fakeStrategy) Start(context.Context, *models.Application) (execution.Session, error) {
+func (s *fakeStrategy) Start(context.Context, *models.Application, int) (execution.Session, error) {
 	return s.startSession, s.startErr
 }
 func (s *fakeStrategy) Stop(context.Context, *models.Application, execution.Session) error {

@@ -41,7 +41,7 @@ func (s *fakeStrategy) Install(context.Context, *models.Application) error {
 func (s *fakeStrategy) Build(context.Context, *models.Application) error {
 	return execution.ErrNotImplemented
 }
-func (s *fakeStrategy) Start(context.Context, *models.Application) (execution.Session, error) {
+func (s *fakeStrategy) Start(context.Context, *models.Application, int) (execution.Session, error) {
 	return execution.Session{}, execution.ErrNotImplemented
 }
 func (s *fakeStrategy) Stop(context.Context, *models.Application, execution.Session) error {
@@ -69,7 +69,7 @@ func TestStrategyLifecycleMethodsReportNotImplemented(t *testing.T) {
 
 	_, healthErr := s.HealthCheck(ctx, app)
 	_, readinessErr := s.Readiness(ctx, app)
-	_, startErr := s.Start(ctx, app)
+	_, startErr := s.Start(ctx, app, 3000)
 	_, statusErr := s.Status(ctx, app, execution.Session{})
 	_, logsErr := s.Logs(ctx, app, execution.Session{})
 

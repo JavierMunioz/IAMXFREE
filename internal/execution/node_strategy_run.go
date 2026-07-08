@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,8 +14,12 @@ import (
 // Start runs app's configured start command as a background process via
 // runtimehost.Host — never systemd, PM2 or Docker; IAMXFREE manages it
 // directly. It refuses to start when Readiness reports the application is
-// not ready, so a caller never has to duplicate that check.
-func (s *nodeStrategy) Start(ctx context.Context, app *models.Application) (Session, error) {
+// not ready, so a caller never has to duplicate that check. port is passed
+// to the process as a PORT environment variable — the convention most Node
+// servers (Express, Next.js, etc.) read to decide where to listen — which
+// is what lets two sessions of the same application coexist on different
+// ports during a zero-downtime deployment.
+func (s *nodeStrategy) Start(ctx context.Context, app *models.Application, port int) (Session, error) {
 	readiness, err := s.Readiness(ctx, app)
 	if err != nil {
 		return Session{}, err
@@ -29,6 +34,7 @@ func (s *nodeStrategy) Start(ctx context.Context, app *models.Application) (Sess
 		Name: name,
 		Args: args,
 		Dir:  app.Source.LocalPath,
+		Env:  []string{"PORT=" + strconv.Itoa(port)},
 	})
 	if err != nil {
 		return Session{}, err
@@ -42,6 +48,7 @@ func (s *nodeStrategy) Start(ctx context.Context, app *models.Application) (Sess
 		WorkingDir: app.Source.LocalPath,
 		Status:     StatusRunning,
 		Runtime:    app.Runtime,
+		Port:       port,
 	}, nil
 }
 
