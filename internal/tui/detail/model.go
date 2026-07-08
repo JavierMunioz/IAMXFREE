@@ -118,6 +118,12 @@ type Model struct {
 	loading bool
 	loadErr error
 
+	// confirmingDelete is true after the first "d" press: the next key
+	// either confirms (another "d") or cancels (anything else). This
+	// guards a destructive, irreversible action behind two deliberate
+	// presses instead of one.
+	confirmingDelete bool
+
 	width  int
 	height int
 }
@@ -274,6 +280,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stopFailedMsg:
+		m = m.SetError(msg.err)
+		return m, nil
+
+	case deleteFailedMsg:
 		m = m.SetError(msg.err)
 		return m, nil
 

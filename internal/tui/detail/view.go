@@ -40,7 +40,7 @@ func (m Model) View() string {
 // implemented yet" via the status line instead of doing nothing silently.
 func (m Model) renderActionBar() string {
 	return footerStyle.Render(
-		"s: start  ·  x: stop  ·  l: logs  ·  p: deployment plan  ·  r: restart*  ·  e: edit*  ·  f5: refresh  ·  b/esc: back  ·  q: quit    (* not implemented yet)",
+		"s: start  ·  x: stop  ·  l: logs  ·  p: deployment plan  ·  d: delete  ·  r: restart*  ·  e: edit*  ·  f5: refresh  ·  b/esc: back  ·  q: quit    (* not implemented yet)",
 	)
 }
 

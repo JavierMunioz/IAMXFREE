@@ -6,6 +6,18 @@ import tea "github.com/charmbracelet/bubbletea"
 // More actions (start, stop, refresh, restart/logs/edit placeholders) are
 // added alongside their own capability.
 func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
+	// A pending delete confirmation intercepts every key: "d" again
+	// confirms it, anything else cancels. This runs before the normal
+	// switch so no other binding can fire mid-confirmation.
+	if m.confirmingDelete {
+		m.confirmingDelete = false
+		if key.String() == "d" {
+			m = m.SetStatus("Deleting…")
+			return m, m.deleteCmd()
+		}
+		return m.SetStatus("Delete cancelled."), nil
+	}
+
 	switch key.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -48,6 +60,10 @@ func (m Model) handleKey(key tea.KeyMsg) (Model, tea.Cmd) {
 	case "p":
 		appID := m.appID
 		return m, func() tea.Msg { return OpenDeploymentPlanMsg{AppID: appID} }
+
+	case "d":
+		m.confirmingDelete = true
+		return m.SetStatus("Press d again to permanently delete this application, any other key cancels."), nil
 	}
 
 	return m, nil
