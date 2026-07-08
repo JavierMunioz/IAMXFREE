@@ -31,8 +31,16 @@ type DeploymentConfig struct {
 	PostDeployHook string `json:"post_deploy_hook,omitempty"`
 
 	// Strategy chooses how a deployment brings the new version up. Blank
-	// behaves as DeploymentStrategyStandard — deployment.Engine does not
-	// yet branch on this field; it exists so the wizard and a future
-	// zero-downtime implementation have a place to read/write it.
+	// behaves as DeploymentStrategyStandard.
 	Strategy DeploymentStrategy `json:"strategy,omitempty"`
+
+	// PrimaryPort and SecondaryPort are the two ports a
+	// DeploymentStrategyZeroDowntime deployment alternates between: at any
+	// time exactly one of them is serving traffic (the active port) and
+	// the other is free for the next deployment's candidate session. Both
+	// zero means neither has been decided yet — deployment.Engine
+	// bootstraps them from InternalPort the first time a zero-downtime
+	// deployment actually runs, rather than inventing them here.
+	PrimaryPort   int `json:"primary_port,omitempty"`
+	SecondaryPort int `json:"secondary_port,omitempty"`
 }
