@@ -35,6 +35,7 @@ type FakeHost struct {
 	symlinkErrors map[string]error
 
 	startProcessResults map[string]startProcessResult
+	startedEnvs         map[string][]string
 	runningPIDs         map[int]bool
 	stopErrors          map[int]error
 	stoppedPIDs         map[int]bool
@@ -75,6 +76,7 @@ func NewFakeHost() *FakeHost {
 		symlinks:            make(map[string]string),
 		symlinkErrors:       make(map[string]error),
 		startProcessResults: make(map[string]startProcessResult),
+		startedEnvs:         make(map[string][]string),
 		runningPIDs:         make(map[int]bool),
 		stopErrors:          make(map[int]error),
 		stoppedPIDs:         make(map[int]bool),
@@ -322,11 +324,20 @@ func (f *FakeHost) Symlink(target, linkPath string) error {
 
 func (f *FakeHost) StartProcess(_ context.Context, cmd runtimehost.Command) (int, error) {
 	key := commandKey(cmd.Name, cmd.Args)
+	f.startedEnvs[key] = cmd.Env
 	result, ok := f.startProcessResults[key]
 	if !ok {
 		return 0, fmt.Errorf("runtimehosttest: no start-process result configured for %q", key)
 	}
 	return result.pid, result.err
+}
+
+// StartedEnv returns the Env passed to the most recent StartProcess call
+// matching name and args, and whether StartProcess was ever called with
+// that command at all.
+func (f *FakeHost) StartedEnv(name string, args []string) ([]string, bool) {
+	env, ok := f.startedEnvs[commandKey(name, args)]
+	return env, ok
 }
 
 func (f *FakeHost) IsProcessRunning(pid int) (bool, error) {

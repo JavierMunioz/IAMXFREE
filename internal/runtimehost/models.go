@@ -14,6 +14,12 @@ type Command struct {
 	Name string
 	Args []string
 	Dir  string
+
+	// Env holds extra "KEY=VALUE" entries appended to the process's
+	// inherited environment (the same convention as os/exec.Cmd.Env).
+	// Empty means the process gets exactly what it would have without
+	// this field: the host's own environment, untouched.
+	Env []string
 }
 
 // CommandResult is what running a Command produced. Stdout/Stderr are only

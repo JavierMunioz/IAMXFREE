@@ -102,6 +102,22 @@ func TestLinuxHostRunDoesNotCaptureOutput(t *testing.T) {
 	}
 }
 
+func TestLinuxHostRunCapturedRespectsEnv(t *testing.T) {
+	host := runtimehost.NewLinuxHost()
+
+	result, err := host.RunCaptured(context.Background(), runtimehost.Command{
+		Name: "sh",
+		Args: []string{"-c", "echo $PORT"},
+		Env:  []string{"PORT=4242"},
+	})
+	if err != nil {
+		t.Fatalf("RunCaptured() error = %v", err)
+	}
+	if result.Stdout != "4242\n" {
+		t.Errorf("Stdout = %q, want %q", result.Stdout, "4242\n")
+	}
+}
+
 func TestLinuxHostRunRespectsDir(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "marker.txt"), []byte("x"), 0o644); err != nil {

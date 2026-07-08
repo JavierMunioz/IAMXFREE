@@ -309,6 +309,26 @@ func TestFakeHostStartProcessConfigured(t *testing.T) {
 	}
 }
 
+func TestFakeHostStartProcessRecordsEnv(t *testing.T) {
+	host := runtimehosttest.NewFakeHost().
+		WithStartProcess("npm", []string{"start"}, 4242, nil)
+
+	_, err := host.StartProcess(context.Background(), runtimehost.Command{
+		Name: "npm", Args: []string{"start"}, Env: []string{"PORT=3001"},
+	})
+	if err != nil {
+		t.Fatalf("StartProcess() error = %v", err)
+	}
+
+	env, ok := host.StartedEnv("npm", []string{"start"})
+	if !ok {
+		t.Fatal("expected StartedEnv to report the command was started")
+	}
+	if len(env) != 1 || env[0] != "PORT=3001" {
+		t.Errorf("StartedEnv() = %v, want [PORT=3001]", env)
+	}
+}
+
 func TestFakeHostStartProcessUnconfiguredReturnsError(t *testing.T) {
 	host := runtimehosttest.NewFakeHost()
 

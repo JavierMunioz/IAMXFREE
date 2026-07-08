@@ -79,6 +79,9 @@ func (h *LinuxHost) RunCaptured(ctx context.Context, cmd Command) (CommandResult
 func (h *LinuxHost) run(ctx context.Context, cmd Command, capture bool) (CommandResult, error) {
 	execCmd := exec.CommandContext(ctx, cmd.Name, cmd.Args...)
 	execCmd.Dir = cmd.Dir
+	if len(cmd.Env) > 0 {
+		execCmd.Env = append(os.Environ(), cmd.Env...)
+	}
 
 	var stdout, stderr bytes.Buffer
 	if capture {
@@ -186,6 +189,9 @@ func (h *LinuxHost) Symlink(target, linkPath string) error {
 func (h *LinuxHost) StartProcess(_ context.Context, cmd Command) (int, error) {
 	execCmd := exec.Command(cmd.Name, cmd.Args...)
 	execCmd.Dir = cmd.Dir
+	if len(cmd.Env) > 0 {
+		execCmd.Env = append(os.Environ(), cmd.Env...)
+	}
 
 	stdout, err := execCmd.StdoutPipe()
 	if err != nil {
