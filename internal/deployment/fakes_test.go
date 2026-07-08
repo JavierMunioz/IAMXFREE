@@ -43,18 +43,37 @@ func (f *fakeAppService) CheckGitStatus(context.Context, string) (services.GitSt
 type fakeExecutionService struct {
 	session services.RunSession
 	running bool
+
+	installFn  func(ctx context.Context, appID string) error
+	installErr error
+	buildFn    func(ctx context.Context, appID string) error
+	buildErr   error
+
+	startSession services.RunSession
+	startErr     error
+	stopErr      error
+	stoppedWith  services.RunSession
 }
 
-func (f *fakeExecutionService) Install(context.Context, string) error {
-	return execution.ErrNotImplemented
+func (f *fakeExecutionService) Install(ctx context.Context, appID string) error {
+	if f.installFn != nil {
+		return f.installFn(ctx, appID)
+	}
+	return f.installErr
 }
-func (f *fakeExecutionService) Build(context.Context, string) error {
-	return execution.ErrNotImplemented
+func (f *fakeExecutionService) Build(ctx context.Context, appID string) error {
+	if f.buildFn != nil {
+		return f.buildFn(ctx, appID)
+	}
+	return f.buildErr
 }
 func (f *fakeExecutionService) Start(context.Context, string) (services.RunSession, error) {
-	return services.RunSession{}, execution.ErrNotImplemented
+	return f.startSession, f.startErr
 }
-func (f *fakeExecutionService) Stop(context.Context, string, services.RunSession) error { return nil }
+func (f *fakeExecutionService) Stop(_ context.Context, _ string, session services.RunSession) error {
+	f.stoppedWith = session
+	return f.stopErr
+}
 func (f *fakeExecutionService) RefreshSession(context.Context, string, services.RunSession) (services.RunSession, error) {
 	return services.RunSession{}, nil
 }
