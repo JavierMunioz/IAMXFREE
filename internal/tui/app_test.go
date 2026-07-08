@@ -220,6 +220,24 @@ func TestRootModelBackMsgReturnsToDashboard(t *testing.T) {
 	}
 }
 
+func TestRootModelDeletedMsgReturnsToDashboard(t *testing.T) {
+	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
+	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))
+	m.screen = screenDetail
+
+	updated, cmd := m.Update(detail.DeletedMsg{AppID: app.ID, Name: app.Name})
+	m = updated.(RootModel)
+	if m.screen != screenDashboard {
+		t.Fatalf("screen = %v, want screenDashboard", m.screen)
+	}
+	if cmd == nil {
+		t.Fatal("expected returning to the dashboard after delete to trigger a reload")
+	}
+	if !strings.Contains(m.dashboard.View(), app.Name) {
+		t.Fatal("expected the dashboard to show a status message naming the deleted application")
+	}
+}
+
 func TestRootModelOpenLogsMsgSwitchesToLogsScreen(t *testing.T) {
 	app := models.NewApplication("my-api", models.ApplicationTypeAPI)
 	m := NewRootModel(&fakeApplicationService{app: app}, fakeExecutionService{}, fakeApplicationSetupService{}, testDeploymentEngine(&fakeApplicationService{app: app}, fakeExecutionService{}))

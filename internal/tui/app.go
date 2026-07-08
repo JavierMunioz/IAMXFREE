@@ -111,6 +111,11 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.screen = screenDashboard
 		return m, m.dashboard.Reload()
 
+	case detail.DeletedMsg:
+		m.screen = screenDashboard
+		m.dashboard = m.dashboard.SetStatus(fmt.Sprintf("Application %q deleted.", msg.Name))
+		return m, m.dashboard.Reload()
+
 	case detail.OpenLogsMsg:
 		m.screen = screenLogs
 		m.logs = logs.New(m.execution, msg.AppID, msg.Session)
