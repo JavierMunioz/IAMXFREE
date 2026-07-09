@@ -12,6 +12,10 @@ import (
 type fakeAppService struct {
 	app    *models.Application
 	getErr error
+
+	updatedConfig     models.DeploymentConfig
+	updateConfigErr   error
+	updateConfigCalls int
 }
 
 func (f *fakeAppService) Register(context.Context, *models.Application) error { return nil }
@@ -22,8 +26,13 @@ func (f *fakeAppService) Get(_ context.Context, id string) (*models.Application,
 	return f.app, nil
 }
 func (f *fakeAppService) List(context.Context) ([]*models.Application, error) { return nil, nil }
-func (f *fakeAppService) UpdateConfig(context.Context, string, models.DeploymentConfig) (*models.Application, error) {
-	return nil, nil
+func (f *fakeAppService) UpdateConfig(_ context.Context, _ string, cfg models.DeploymentConfig) (*models.Application, error) {
+	f.updatedConfig = cfg
+	f.updateConfigCalls++
+	if f.updateConfigErr != nil {
+		return nil, f.updateConfigErr
+	}
+	return f.app, nil
 }
 func (f *fakeAppService) ChangeStatus(context.Context, string, models.ApplicationStatus) (*models.Application, error) {
 	return nil, nil
