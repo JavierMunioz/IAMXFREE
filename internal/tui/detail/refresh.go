@@ -51,7 +51,7 @@ func (m Model) snapshotCmd() tea.Cmd {
 // runtime snapshot. This is the only refresh IAMXFREE performs — there is
 // no automatic/periodic refresh yet.
 func (m Model) refreshCmd() tea.Cmd {
-	cmds := []tea.Cmd{m.loadHealthCmd(), m.loadGitStatusCmd()}
+	cmds := []tea.Cmd{m.loadHealthCmd(), m.loadGitStatusCmd(), m.loadCandidateSessionCmd()}
 	if m.hasSession {
 		cmds = append(cmds, m.refreshSessionCmd(), m.snapshotCmd())
 	}

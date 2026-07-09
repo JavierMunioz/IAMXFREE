@@ -78,6 +78,15 @@ type activeSessionLoadedMsg struct {
 	found   bool
 }
 
+// candidateSessionLoadedMsg carries whatever candidate session
+// ExecutionService is tracking for this application, if any — populated
+// only while a zero-downtime deployment has started a second session
+// alongside the active one and hasn't yet confirmed the switch.
+type candidateSessionLoadedMsg struct {
+	session services.RunSession
+	found   bool
+}
+
 // snapshotLoadedMsg carries a fresh RuntimeSnapshot, obtained only through
 // an explicit refresh (see refresh.go) — never automatically.
 type snapshotLoadedMsg struct {
@@ -108,6 +117,9 @@ type Model struct {
 
 	session    services.RunSession
 	hasSession bool
+
+	candidateSession    services.RunSession
+	hasCandidateSession bool
 
 	snapshot    services.RuntimeSnapshot
 	hasSnapshot bool
@@ -141,7 +153,7 @@ func New(appService services.ApplicationService, executionService services.Execu
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadAppCmd(), m.loadHealthCmd(), m.loadActiveSessionCmd(), m.loadGitStatusCmd())
+	return tea.Batch(m.loadAppCmd(), m.loadHealthCmd(), m.loadActiveSessionCmd(), m.loadCandidateSessionCmd(), m.loadGitStatusCmd())
 }
 
 func (m Model) loadAppCmd() tea.Cmd {
@@ -195,6 +207,19 @@ func (m Model) loadActiveSessionCmd() tea.Cmd {
 	return func() tea.Msg {
 		session, ok := service.ActiveSession(id)
 		return activeSessionLoadedMsg{session: session, found: ok}
+	}
+}
+
+// loadCandidateSessionCmd asks ExecutionService whether it's tracking a
+// zero-downtime candidate session for this application, the same way
+// loadActiveSessionCmd does for the active one. Performs no I/O — never
+// fails.
+func (m Model) loadCandidateSessionCmd() tea.Cmd {
+	service := m.executionService
+	id := m.appID
+	return func() tea.Msg {
+		session, ok := service.CandidateSession(id)
+		return candidateSessionLoadedMsg{session: session, found: ok}
 	}
 }
 
@@ -256,6 +281,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.found {
 			m.session = msg.session
 			m.hasSession = true
+		}
+		return m, nil
+
+	case candidateSessionLoadedMsg:
+		m.hasCandidateSession = msg.found
+		if msg.found {
+			m.candidateSession = msg.session
+		} else {
+			m.candidateSession = services.RunSession{}
 		}
 		return m, nil
 

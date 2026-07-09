@@ -315,6 +315,47 @@ func TestInitLeavesNoSessionWhenNoneTracked(t *testing.T) {
 	}
 }
 
+func TestInitHydratesAnAlreadyTrackedCandidateSession(t *testing.T) {
+	app := newTestApp()
+	execSvc := &fakeExecutionService{
+		candidateSession:    services.RunSession{PID: 2000, Port: 3001, Status: "running"},
+		hasCandidateSession: true,
+	}
+	m := New(&fakeAppService{app: app}, execSvc, app.ID)
+
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("expected Init to return a command")
+	}
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected a tea.BatchMsg, got %T", cmd())
+	}
+
+	for _, batched := range batch {
+		if msg, ok := batched().(candidateSessionLoadedMsg); ok {
+			m, _ = update(t, m, msg)
+		}
+	}
+
+	if !m.hasCandidateSession || m.candidateSession.PID != 2000 {
+		t.Fatalf("expected the already-tracked candidate to be hydrated, got hasCandidateSession=%v candidateSession=%+v",
+			m.hasCandidateSession, m.candidateSession)
+	}
+}
+
+func TestCandidateSessionLoadedMsgClearsWhenNotFound(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m.hasCandidateSession = true
+	m.candidateSession = services.RunSession{PID: 2000}
+
+	m, _ = update(t, m, candidateSessionLoadedMsg{found: false})
+	if m.hasCandidateSession {
+		t.Fatal("expected hasCandidateSession to clear when ExecutionService no longer tracks one")
+	}
+}
+
 func TestBackEmitsBackMsg(t *testing.T) {
 	app := newTestApp()
 	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)

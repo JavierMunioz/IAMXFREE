@@ -32,13 +32,15 @@ func TestRefreshCmdOnlyChecksHealthAndGitWithoutSession(t *testing.T) {
 		t.Fatalf("expected a tea.BatchMsg, got %T", m.refreshCmd()())
 	}
 
-	var sawHealth, sawGit bool
+	var sawHealth, sawGit, sawCandidate bool
 	for _, cmd := range batch {
 		switch cmd().(type) {
 		case healthLoadedMsg:
 			sawHealth = true
 		case gitStatusLoadedMsg, gitStatusUnavailableMsg:
 			sawGit = true
+		case candidateSessionLoadedMsg:
+			sawCandidate = true
 		}
 	}
 	if !sawHealth {
@@ -47,8 +49,11 @@ func TestRefreshCmdOnlyChecksHealthAndGitWithoutSession(t *testing.T) {
 	if !sawGit {
 		t.Error("expected the batch to include a command producing a Git status message")
 	}
-	if len(batch) != 2 {
-		t.Fatalf("expected exactly 2 commands without a tracked session, got %d", len(batch))
+	if !sawCandidate {
+		t.Error("expected the batch to include a command producing candidateSessionLoadedMsg")
+	}
+	if len(batch) != 3 {
+		t.Fatalf("expected exactly 3 commands without a tracked session, got %d", len(batch))
 	}
 }
 

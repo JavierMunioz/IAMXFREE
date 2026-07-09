@@ -61,6 +61,27 @@ func TestRenderExecutionPanelShowsRunningSession(t *testing.T) {
 	}
 }
 
+func TestRenderExecutionPanelShowsBothActiveAndCandidateSessions(t *testing.T) {
+	app := newTestApp()
+	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)
+	m, _ = update(t, m, appLoadedMsg{app: app})
+	m.hasSession = true
+	m.session = services.RunSession{PID: 1000, Port: 3000, Status: "running"}
+	m.hasCandidateSession = true
+	m.candidateSession = services.RunSession{PID: 2000, Port: 3001, Status: "running"}
+
+	panel := m.renderExecutionPanel(60)
+	for _, want := range []string{
+		"Active", "receiving traffic",
+		"Candidate", "not yet receiving traffic",
+		"1000", "3000", "2000", "3001",
+	} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("execution panel missing %q:\n%s", want, panel)
+		}
+	}
+}
+
 func TestRenderMetricsPanelShowsNoMetricsYet(t *testing.T) {
 	app := newTestApp()
 	m := New(&fakeAppService{app: app}, &fakeExecutionService{}, app.ID)

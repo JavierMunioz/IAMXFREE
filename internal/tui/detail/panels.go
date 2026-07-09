@@ -129,9 +129,12 @@ func (m Model) renderGitPanel(width int) string {
 	return panelStyle.Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
-// renderExecutionPanel shows the live session IAMXFREE is tracking for this
-// application, if any. When no session is active, that is stated clearly
-// rather than leaving fields blank.
+// renderExecutionPanel shows the live session(s) IAMXFREE is tracking for
+// this application. When no session is active, that is stated clearly
+// rather than leaving fields blank. While a zero-downtime deployment has a
+// candidate session started alongside the active one, both are shown,
+// labeled Active/Candidate, with a note on which one currently receives
+// traffic — the panel simply grows taller for as long as that lasts.
 func (m Model) renderExecutionPanel(width int) string {
 	var lines []string
 	lines = append(lines, primaryStyle.Bold(true).Render("Execution"))
@@ -141,23 +144,49 @@ func (m Model) renderExecutionPanel(width int) string {
 		lines = append(lines, mutedStyle.Render("No active session."))
 		lines = append(lines, mutedStyle.Render("Press s to start."))
 	} else {
-		running := m.session.Status == "running"
-		runningText := lipgloss.NewStyle().Foreground(colorCritical).Render("✕ stopped")
-		if running {
-			runningText = lipgloss.NewStyle().Foreground(colorGood).Render("● running")
+		label := "Active"
+		if m.hasCandidateSession {
+			label = "Active — receiving traffic"
 		}
+		lines = append(lines, mutedStyle.Render(label))
+		lines = append(lines, sessionRows(m.session)...)
+	}
 
-		rows := [][2]string{
-			{"Running", runningText},
-			{"PID", fmt.Sprintf("%d", m.session.PID)},
-			{"Started", m.session.StartedAt.Format("2006-01-02 15:04:05")},
-			{"Work dir", valueOrDash(m.session.WorkingDir)},
-			{"Runtime", valueOrDash(string(m.session.Runtime))},
-		}
-		for _, row := range rows {
-			lines = append(lines, labelStyle.Render(row[0])+row[1])
-		}
+	if m.hasCandidateSession {
+		lines = append(lines, "")
+		lines = append(lines, mutedStyle.Render("Candidate — not yet receiving traffic"))
+		lines = append(lines, sessionRows(m.candidateSession)...)
 	}
 
 	return panelStyle.Width(width).Height(9).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+// sessionRows renders the fields shared by the active and candidate
+// sessions in renderExecutionPanel — a single source of layout so the two
+// never drift apart in shape.
+func sessionRows(session services.RunSession) []string {
+	running := session.Status == "running"
+	runningText := lipgloss.NewStyle().Foreground(colorCritical).Render("✕ stopped")
+	if running {
+		runningText = lipgloss.NewStyle().Foreground(colorGood).Render("● running")
+	}
+
+	port := ""
+	if session.Port != 0 {
+		port = fmt.Sprintf("%d", session.Port)
+	}
+
+	rows := [][2]string{
+		{"Running", runningText},
+		{"PID", fmt.Sprintf("%d", session.PID)},
+		{"Port", valueOrDash(port)},
+		{"Started", session.StartedAt.Format("2006-01-02 15:04:05")},
+		{"Work dir", valueOrDash(session.WorkingDir)},
+		{"Runtime", valueOrDash(string(session.Runtime))},
+	}
+	lines := make([]string, 0, len(rows))
+	for _, row := range rows {
+		lines = append(lines, labelStyle.Render(row[0])+row[1])
+	}
+	return lines
 }
